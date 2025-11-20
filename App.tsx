@@ -30,7 +30,7 @@ const App: React.FC = () => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
+  const [billingCycle] = useState<BillingCycle>('monthly');
 
   const resultRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
@@ -309,7 +309,13 @@ const App: React.FC = () => {
       if (isSupabaseConfigured() && supabase && password) {
           // REAL SUPABASE AUTH
           if (isSignUp) {
-              const { error } = await supabase.auth.signUp({ email, password });
+              const { error } = await supabase.auth.signUp({ 
+                email, 
+                password,
+                options: {
+                  emailRedirectTo: window.location.origin
+                }
+              });
               if (error) throw error;
               // We don't need to manually insert here, because fetchUserProfile handles "missing user" check
               // when the session is established.
@@ -373,22 +379,6 @@ const App: React.FC = () => {
          localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
          localStorage.setItem(`user_${updatedUser.email}`, JSON.stringify(updatedUser));
       }
-  };
-
-  // Demo Mode for User Preview
-  const handleDemoBilling = () => {
-      const demoUser: User = {
-          id: 'demo_dev_user',
-          email: 'demo@instantquotegenerator.com',
-          plan: 'pro',
-          status: 'active',
-          trialStartDate: Date.now() - (1000 * 60 * 60 * 24 * 3),
-          companyName: 'Demo Construction LLC',
-          companyPhone: '(555) 123-4567'
-      };
-      setUser(demoUser);
-      setCurrentView('billing');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // View Router

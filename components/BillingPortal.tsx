@@ -81,13 +81,6 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
       window.location.href = link;
   };
 
-  // For Dev testing since we can't control Stripe redirect in preview
-  const handleSimulateSuccess = () => {
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('success', 'true');
-      window.location.href = currentUrl.toString();
-  };
-
   const handleSaveSettings = (e: React.FormEvent) => {
       e.preventDefault();
       if (!user) return;
@@ -185,13 +178,6 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                                 </>
                             )}
                         </button>
-                        
-                        {/* Dev Helper - Commented out for production */}
-                        {/* 
-                        <button onClick={handleSimulateSuccess} className="text-[10px] opacity-40 hover:opacity-100 underline">
-                            Simulate Success
-                        </button> 
-                        */}
                     </div>
                 </div>
             </div>
