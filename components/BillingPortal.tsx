@@ -36,7 +36,7 @@ const STRIPE_LINKS = {
     yearly: 'https://buy.stripe.com/dRm14nd6k7xz0213gZ8Vi0G'
 };
 
-export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onActivate, onUpdateUser, initialBillingCycle = 'monthly' }) => {
+export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, initialBillingCycle = 'monthly' }) => {
   const [activeTab, setActiveTab] = useState<Tab>('billing');
   const [isLoading, setIsLoading] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);

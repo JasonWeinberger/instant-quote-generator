@@ -97,7 +97,7 @@ const App: React.FC = () => {
 
       try {
           // Fetch profile from 'users' table
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('users')
             .select('*')
             .eq('id', userId)
@@ -157,6 +157,7 @@ const App: React.FC = () => {
         if (isSupabaseConfigured() && supabase) {
              // REAL MODE: Update DB
              // We depend on 'user' being populated by the Auth Listener first.
+             // Use non-null assertion because we checked isSupabaseConfigured
              supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
                  if (authUser) {
                      const { error } = await supabase
@@ -306,12 +307,12 @@ const App: React.FC = () => {
       if (isSupabaseConfigured() && supabase && password) {
           // REAL SUPABASE AUTH
           if (isSignUp) {
-              const { data, error } = await supabase.auth.signUp({ email, password });
+              const { error } = await supabase.auth.signUp({ email, password });
               if (error) throw error;
               // We don't need to manually insert here, because fetchUserProfile handles "missing user" check
               // when the session is established.
           } else {
-              const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+              const { error } = await supabase.auth.signInWithPassword({ email, password });
               if (error) throw error;
           }
           setCurrentView('landing');

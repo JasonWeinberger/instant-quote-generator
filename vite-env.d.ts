@@ -10,9 +10,9 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-// Augment the NodeJS namespace to ensure process.env is typed correctly
-// without shadowing the global process variable. This fixes the "cwd missing"
-// error in vite.config.ts and the "redeclare" error.
+// Augment NodeJS namespace to type process.env variables
+// This avoids "Cannot redeclare block-scoped variable 'process'" error
+// and ensures process.cwd() remains available in node configuration files.
 declare namespace NodeJS {
   interface ProcessEnv {
     API_KEY: string;
