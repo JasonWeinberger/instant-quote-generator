@@ -156,11 +156,13 @@ const App: React.FC = () => {
         if (isSupabaseConfigured() && supabase) {
              // REAL MODE: Update DB
              // We depend on 'user' being populated by the Auth Listener first.
-             // Use non-null assertion because we checked isSupabaseConfigured
-             // Fix: Use ! assertion to tell TS that supabase is not null here.
-             supabase!.auth.getUser().then(async ({ data: { user: authUser } }) => {
+             
+             // Capture client locally to enforce non-null in closure
+             const client = supabase;
+             
+             client.auth.getUser().then(async ({ data: { user: authUser } }) => {
                  if (authUser) {
-                     const { error } = await supabase!
+                     const { error } = await client
                         .from('users')
                         .update({ status: 'active' })
                         .eq('id', authUser.id);
