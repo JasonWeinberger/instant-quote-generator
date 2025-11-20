@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 3000,
+      host: true, // Bind to all network interfaces (0.0.0.0) to fix "localhost refused" in some envs
     },
     define: {
       // Explicitly replace process.env variables with their values during build.

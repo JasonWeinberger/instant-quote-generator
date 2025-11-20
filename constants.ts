@@ -15,8 +15,9 @@ export const INDUSTRIES: IndustryOption[] = [
 // 1. Go to Stripe Dashboard > Payments > Payment Links.
 // 2. Create a new link for your product (e.g., "Pro Plan - Monthly").
 // 3. Under "After payment", select "Don't show confirmation page".
-// 4. Enter your redirect URL with the success flag: 
-//    https://YOUR-APP-URL.vercel.app/?success=true
+// 4. Enter your redirect URL with the payment_success flag: 
+//    http://localhost:3000/?payment_success=true  (Local)
+//    https://YOUR-APP-URL.vercel.app/?payment_success=true (Production)
 // 5. Copy the generated link (starts with buy.stripe.com) and paste it below.
 
 export const STRIPE_LINKS = {
