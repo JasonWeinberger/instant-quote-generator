@@ -15,7 +15,8 @@ import {
   Phone,
   MapPin,
   ExternalLink,
-  Zap
+  Zap,
+  Mail
 } from 'lucide-react';
 
 interface BillingPortalProps {
@@ -360,6 +361,18 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                     <Shield size={12} />
                     <span>Enterprise-grade security enabled</span>
                 </div>
+                </div>
+
+                {/* Support Contact */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                    <h3 className="font-bold text-slate-900 mb-2">Support</h3>
+                    <p className="text-sm text-slate-600 mb-4">
+                        Support or billing questions?
+                    </p>
+                    <a href="mailto:support@instantquotegenerator.com" className="flex items-center gap-2 text-indigo-600 font-bold text-sm hover:underline">
+                        <Mail size={16} /> Email Support
+                    </a>
+                    <p className="text-xs text-slate-400 mt-2">We’ll respond within 24 hours.</p>
                 </div>
 
                 {/* Danger Zone */}

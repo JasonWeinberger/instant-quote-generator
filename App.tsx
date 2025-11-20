@@ -70,18 +70,19 @@ const App: React.FC = () => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!session) {
                 setUser(null);
-            } else {
-                 // Refresh profile
+            } else if (event === 'SIGNED_IN') {
+                 // Explicitly handle sign-in redirect if needed, or just state update
+                 // If coming from email link, session is now active
                  if (!user || user.id !== session.user.id) {
                     await fetchUserProfile(session.user.id, session.user.email || '');
                  }
-                 
-                 // If user just signed in (e.g. via email link), ensure they are on the landing page
-                 if (event === 'SIGNED_IN') {
-                     // We don't force 'landing' blindly to avoid disrupting navigation, 
-                     // but if they are in a neutral state it helps.
-                     // For now, relying on default state is safer.
+                 // Check if this was a signup flow upgrade
+                 if (localStorage.getItem('pendingUpgrade') === 'true') {
+                    setShowPaywallModal(true);
                  }
+            } else if (event === 'PASSWORD_RECOVERY') {
+                 // Handle password recovery event if necessary, usually supabase handles the session
+                 setCurrentView('billing'); // Or settings to change password
             }
         });
         return () => subscription.unsubscribe();
@@ -113,16 +114,23 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Auto-trigger Paywall if pending upgrade flag is set and user logs in
+  useEffect(() => {
+    if (user && localStorage.getItem('pendingUpgrade') === 'true') {
+        setShowPaywallModal(true);
+    }
+  }, [user]);
+
   const fetchUserProfile = async (userId: string, email: string) => {
       if (!supabase) return;
 
       try {
           // Fetch profile from 'users' table
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('users')
             .select('*')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
           if (data) {
               const u: User = {
@@ -136,6 +144,19 @@ const App: React.FC = () => {
                   companyAddress: data.company_address
               };
               setUser(u);
+          } else {
+              // If no profile exists (new signup without trigger), create a default local state
+              // This ensures the app works even if the DB row isn't ready yet.
+              const newUser: User = {
+                  id: userId,
+                  email: email,
+                  plan: 'starter',
+                  status: 'trial',
+                  trialStartDate: Date.now()
+              };
+              setUser(newUser);
+              // Optionally try to insert it now? For now, we rely on it being created or just working in memory.
+              console.warn("User profile not found in DB, using default state.");
           }
       } catch (err) {
           console.error("Unexpected error fetching profile:", err);
@@ -226,9 +247,8 @@ const App: React.FC = () => {
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
           if (isSignUp) {
-              // We removed the explicit `emailRedirectTo` here.
-              // This forces Supabase to use the "Site URL" configured in the Dashboard.
-              // This prevents the app from accidentally redirecting to localhost when running on a custom domain.
+              // We let Supabase handle the redirect URL based on the Dashboard "Site URL"
+              // to avoid localhost errors on production.
               const { data, error } = await supabase.auth.signUp({ 
                 email, 
                 password
@@ -262,6 +282,19 @@ const App: React.FC = () => {
           setUser(userData);
           localStorage.setItem('quoteGenUser', JSON.stringify(userData));
           setCurrentView('landing');
+      }
+  };
+
+  const handleResetPassword = async (email: string) => {
+      if (isSupabaseConfigured() && supabase) {
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: window.location.origin,
+          });
+          if (error) throw error;
+      } else {
+          // DEMO
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log(`Password reset requested for ${email}`);
       }
   };
 
@@ -314,7 +347,8 @@ const App: React.FC = () => {
           }
       }
       
-      // 4. Redirect to Landing Page
+      // 4. Cleanup and Redirect
+      localStorage.removeItem('pendingUpgrade'); // Clear the upgrade flag
       setShowPaywallModal(false);
       setCurrentView('landing');
   };
@@ -349,6 +383,7 @@ const App: React.FC = () => {
   };
 
   const handleStripeRedirect = () => {
+    localStorage.removeItem('pendingUpgrade'); // Clear the upgrade flag before leaving
     window.location.href = STRIPE_LINKS.monthly;
   };
 
@@ -356,6 +391,7 @@ const App: React.FC = () => {
       if (user) {
           handleStripeRedirect();
       } else {
+          localStorage.setItem('pendingUpgrade', 'true');
           setCurrentView('login');
       }
   };
@@ -366,7 +402,13 @@ const App: React.FC = () => {
   }
 
   if (currentView === 'login') {
-      return <LoginPage onAuth={handleAuth} onBack={() => setCurrentView('landing')} />;
+      return (
+        <LoginPage 
+            onAuth={handleAuth} 
+            onResetPassword={handleResetPassword}
+            onBack={() => setCurrentView('landing')} 
+        />
+      );
   }
 
   if (currentView === 'billing') {
@@ -680,7 +722,14 @@ const App: React.FC = () => {
                 </div>
 
                 <button 
-                    onClick={user ? handleStripeRedirect : () => setCurrentView('login')}
+                    onClick={() => {
+                        if (user) {
+                            handleStripeRedirect();
+                        } else {
+                            localStorage.setItem('pendingUpgrade', 'true');
+                            setCurrentView('login');
+                        }
+                    }}
                     className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200"
                 >
                     {user ? (
