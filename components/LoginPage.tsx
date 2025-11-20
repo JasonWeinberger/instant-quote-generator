@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check } from 'lucide-react';
 
 interface LoginPageProps {
-  onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void>;
+  onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;
   onBack: () => void;
 }
 
@@ -13,6 +13,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onBack }) => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,14 +27,48 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onBack }) => {
     }
 
     try {
-        await onAuth(email, password, isSignUp);
-        // Success handling is done by parent via View switch
+        const result = await onAuth(email, password, isSignUp);
+        // Use type assertion to safely access property on void union type
+        if (result && (result as any).requiresConfirmation) {
+            setNeedsConfirmation(true);
+            setIsLoading(false);
+        }
+        // If no confirmation required, App component handles redirection
     } catch (err: any) {
         console.error(err);
         setError(err.message || "Authentication failed. Please try again.");
         setIsLoading(false);
     }
   };
+
+  if (needsConfirmation) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 animate-fade-in-up">
+             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
+                     <Mail size={32} />
+                 </div>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
+                 <p className="text-slate-500 mb-8">
+                     We've sent a confirmation link to <strong>{email}</strong>. Please click the link to activate your account.
+                 </p>
+                 <button
+                    onClick={() => {
+                        setNeedsConfirmation(false);
+                        setIsSignUp(false); // Switch to login mode
+                        setError(null);
+                    }}
+                    className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+                 >
+                     Return to Sign In
+                 </button>
+                 <p className="text-xs text-slate-400 mt-4">
+                     If you don't see the email, check your spam folder.
+                 </p>
+             </div>
+        </div>
+      );
+  }
 
   return (
     <div className="min-h-screen flex bg-white animate-fade-in-up">

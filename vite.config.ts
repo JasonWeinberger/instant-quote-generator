@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    server: {
+      port: 3000,
+    },
     define: {
       // Explicitly replace process.env variables with their values during build.
       // We do NOT set 'process.env': {} here, as that can break libraries checking for process.env.NODE_ENV

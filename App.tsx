@@ -6,10 +6,9 @@ import { IndustrySelector } from './components/IndustrySelector';
 import { QuoteResultCard } from './components/QuoteResultCard';
 import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
-import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Shield, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Shield, AlertTriangle, Lock } from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
-const TRIAL_DURATION_DAYS = 7;
 
 type ViewState = 'landing' | 'login' | 'billing';
 type BillingCycle = 'monthly' | 'yearly';
@@ -28,6 +27,7 @@ const App: React.FC = () => {
   const [usageCount, setUsageCount] = useState(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   
@@ -85,7 +85,7 @@ const App: React.FC = () => {
                 const parsedUser: User = JSON.parse(storedUser);
                 // Legacy fix: Ensure ID exists
                 if (!parsedUser.id) parsedUser.id = 'local_' + Date.now();
-                checkTrialStatus(parsedUser);
+                setUser(parsedUser);
             } catch (e) {
                 console.error("Failed to parse user", e);
             }
@@ -115,7 +115,7 @@ const App: React.FC = () => {
                   companyPhone: data.company_phone,
                   companyAddress: data.company_address
               };
-              checkTrialStatus(u);
+              setUser(u);
           } else {
               // SELF-HEALING: Profile doesn't exist (Trigger failed or manual table creation)
               console.log("User profile missing, creating entry...");
@@ -125,7 +125,7 @@ const App: React.FC = () => {
                   .insert({
                       id: userId,
                       email: email,
-                      status: 'trial', // Default to trial
+                      status: 'trial', // Default to trial (Free Tier)
                       // created_at is handled by default in SQL
                   });
 
@@ -138,7 +138,7 @@ const App: React.FC = () => {
                       status: 'trial',
                       trialStartDate: Date.now()
                   };
-                  checkTrialStatus(fallbackUser);
+                  setUser(fallbackUser);
               } else {
                   console.error("Critical: Failed to create user profile.", insertError);
               }
@@ -156,11 +156,7 @@ const App: React.FC = () => {
         // Update status based on whether we are in Real or Demo mode
         if (isSupabaseConfigured() && supabase) {
              // REAL MODE: Update DB
-             // We depend on 'user' being populated by the Auth Listener first.
-             
-             // Capture client locally to enforce non-null in closure
              const client = supabase!;
-             
              client.auth.getUser().then(async ({ data: { user: authUser } }) => {
                  if (authUser) {
                      const { error } = await client
@@ -169,11 +165,8 @@ const App: React.FC = () => {
                         .eq('id', authUser.id);
                      
                      if (!error) {
-                         // Refresh local state
                          await fetchUserProfile(authUser.id, authUser.email || '');
                          setCurrentView('billing');
-                     } else {
-                         console.error("Failed to activate subscription in DB:", error);
                      }
                  }
              });
@@ -193,32 +186,7 @@ const App: React.FC = () => {
         // Clean URL to prevent re-triggering
         window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [user]); // Add user to dependency to capture update after auth load
-
-  const checkTrialStatus = (userData: User) => {
-    if (userData.status === 'active') {
-        setUser(userData);
-        return;
-    }
-
-    const now = Date.now();
-    const msPerDay = 1000 * 60 * 60 * 24;
-    const daysSinceStart = (now - userData.trialStartDate) / msPerDay;
-
-    let updatedUser = { ...userData };
-
-    if (daysSinceStart > TRIAL_DURATION_DAYS) {
-        updatedUser.status = 'expired';
-    } else {
-        updatedUser.status = 'trial';
-    }
-
-    setUser(updatedUser);
-    // Sync back to storage in Demo mode
-    if (!isSupabaseConfigured()) {
-        localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
-    }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -227,20 +195,17 @@ const App: React.FC = () => {
   }, [result]);
 
   // --- LOGIC GATES ---
-  const isGuestLimitReached = !user && usageCount >= MAX_FREE_QUOTES;
-  const guestQuotesRemaining = Math.max(0, MAX_FREE_QUOTES - usageCount);
-  const isTrialExpired = user?.status === 'expired';
+  // Limit reached if: User is NOT active AND usage >= limit
+  const isLimitReached = (user?.status !== 'active') && (usageCount >= MAX_FREE_QUOTES);
+  const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
   // Handlers
   const handleGenerateClick = async () => {
-    if (isGuestLimitReached) {
-        setCurrentView('login');
+    if (isLimitReached) {
+        setShowPaywallModal(true);
         return;
     }
-    if (isTrialExpired) {
-        setCurrentView('billing');
-        return;
-    }
+    
     if (apiKeyMissing) {
       setError("API Key is missing. Please configure it in your deployment settings.");
       return;
@@ -261,8 +226,8 @@ const App: React.FC = () => {
     try {
       const quoteData = await generateQuote(industry, jobDescription, zipCode);
       
-      // Increment Guest Usage
-      if (!user) {
+      // Increment Usage for non-active users
+      if (user?.status !== 'active') {
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           localStorage.setItem('quoteUsageCount', newCount.toString());
@@ -289,7 +254,7 @@ const App: React.FC = () => {
               industry: industry,
               job_description: jobDescription,
               zip_code: zipCode,
-              result: quoteData // Stores the full JSON
+              result: quoteData
           });
           
           if (dbError) console.warn("Failed to save quote to database:", dbError);
@@ -305,32 +270,23 @@ const App: React.FC = () => {
   };
 
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
-      // HYBRID AUTH LOGIC
-      
       if (isSupabaseConfigured() && supabase && password) {
-          // REAL SUPABASE AUTH
           if (isSignUp) {
-              const { error } = await supabase.auth.signUp({ 
+              const { data, error } = await supabase.auth.signUp({ 
                 email, 
                 password,
-                options: {
-                    // This fix ensures the email link redirects to the correct Vite port (e.g., 5173)
-                    // instead of the default localhost:3000
-                    emailRedirectTo: window.location.origin
-                }
+                options: { emailRedirectTo: window.location.origin }
               });
               if (error) throw error;
-              // We don't need to manually insert here, because fetchUserProfile handles "missing user" check
-              // when the session is established.
+              if (data.user && !data.session) return { requiresConfirmation: true };
           } else {
               const { error } = await supabase.auth.signInWithPassword({ email, password });
               if (error) throw error;
           }
           setCurrentView('landing');
       } else {
-          // DEMO/LOCAL AUTH FALLBACK
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Fake delay
-          
+          // DEMO/LOCAL AUTH
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const existingUserStr = localStorage.getItem(`user_${email}`);
           let userData: User;
 
@@ -338,7 +294,7 @@ const App: React.FC = () => {
               userData = JSON.parse(existingUserStr);
           } else {
               userData = {
-                  id: `local_${Date.now()}`, // Generate pseudo-ID
+                  id: `local_${Date.now()}`,
                   email,
                   plan: 'pro',
                   status: 'trial',
@@ -347,7 +303,7 @@ const App: React.FC = () => {
               localStorage.setItem(`user_${email}`, JSON.stringify(userData));
           }
           
-          checkTrialStatus(userData);
+          setUser(userData);
           localStorage.setItem('quoteGenUser', JSON.stringify(userData));
           setCurrentView('landing');
       }
@@ -366,7 +322,6 @@ const App: React.FC = () => {
       setUser(updatedUser);
       
       if (isSupabaseConfigured() && supabase && user?.id) {
-          // Update DB
           const { error } = await supabase
             .from('users')
             .update({
@@ -378,7 +333,6 @@ const App: React.FC = () => {
           
           if (error) console.error("Failed to update settings", error);
       } else {
-         // Local
          localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
          localStorage.setItem(`user_${updatedUser.email}`, JSON.stringify(updatedUser));
       }
@@ -434,8 +388,8 @@ const App: React.FC = () => {
                         </div>
                         <div className="flex flex-col items-start">
                              <span className="text-xs font-bold text-slate-900 leading-none">Account</span>
-                             <span className={`text-[10px] font-medium leading-none mt-0.5 ${user.status === 'expired' ? 'text-red-500' : 'text-indigo-600'}`}>
-                                {user.status === 'trial' ? 'Free Trial' : user.status === 'expired' ? 'Expired' : 'Pro Plan'}
+                             <span className={`text-[10px] font-medium leading-none mt-0.5 ${user.status === 'active' ? 'text-indigo-600' : 'text-slate-500'}`}>
+                                {user.status === 'active' ? 'Pro Plan' : 'Free Plan'}
                              </span>
                         </div>
                    </button>
@@ -444,7 +398,7 @@ const App: React.FC = () => {
                     <button onClick={() => setCurrentView('login')} className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors">
                         Sign In
                     </button>
-                    <button onClick={() => setCurrentView('login')} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
+                    <button onClick={() => scrollToSection(pricingRef)} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
                         Get Unlimited
                     </button>
                 </>
@@ -496,10 +450,10 @@ const App: React.FC = () => {
             <div className="p-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
             <div className="p-8 sm:p-10">
               
-              {!user && (
+              {user?.status !== 'active' && (
                  <div className="mb-8 flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <div className="text-sm text-slate-600">
-                        <span className="font-bold text-slate-900">{guestQuotesRemaining} free quotes</span> remaining
+                        <span className="font-bold text-slate-900">{quotesRemaining} free quotes</span> remaining
                     </div>
                     <div className="flex gap-1">
                         {[...Array(MAX_FREE_QUOTES)].map((_, i) => (
@@ -563,11 +517,10 @@ const App: React.FC = () => {
 
                 <button
                   onClick={handleGenerateClick}
-                  disabled={isLoading || (isGuestLimitReached && !user) || isTrialExpired}
+                  disabled={isLoading}
                   className={`
                     w-full py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform transition-all hover:-translate-y-0.5
                     ${isLoading ? 'bg-slate-100 text-slate-400 cursor-wait shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}
-                    ${((isGuestLimitReached && !user) || isTrialExpired) ? 'opacity-50 cursor-not-allowed hover:translate-y-0' : ''}
                     flex items-center justify-center gap-3
                   `}
                 >
@@ -575,10 +528,10 @@ const App: React.FC = () => {
                     <>
                         <Loader2 className="animate-spin" size={20} /> Generating Estimate...
                     </>
-                  ) : (isGuestLimitReached && !user) ? (
-                    <>Limit Reached - Sign In Free</>
-                  ) : isTrialExpired ? (
-                    <>Trial Expired - Upgrade Now</>
+                  ) : isLimitReached ? (
+                    <>
+                        <Lock size={20} /> Unlock Unlimited Quotes
+                    </>
                   ) : (
                     <>
                         Generate Quote <ArrowRight size={20} />
@@ -656,7 +609,7 @@ const App: React.FC = () => {
          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
              <div className="text-center mb-16">
                  <h2 className="text-3xl font-bold">Simple, Transparent Pricing</h2>
-                 <p className="text-slate-400 mt-4">Start with a free trial. Cancel anytime.</p>
+                 <p className="text-slate-400 mt-4">Try it free. Upgrade when you're ready to scale.</p>
              </div>
 
              <div className="max-w-lg mx-auto bg-slate-800 rounded-3xl border border-slate-700 p-8 sm:p-12 relative overflow-hidden">
@@ -678,7 +631,7 @@ const App: React.FC = () => {
                          "Save & Export History",
                          "Custom Company Branding",
                          "Priority Support",
-                         "7-Day Free Trial"
+                         "Cancel Anytime"
                      ].map((item, i) => (
                          <li key={i} className="flex items-center gap-3 text-slate-300">
                              <Check size={18} className="text-indigo-400" /> {item}
@@ -690,9 +643,8 @@ const App: React.FC = () => {
                     onClick={() => user ? setCurrentView('billing') : setCurrentView('login')}
                     className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-900/50"
                  >
-                     {user ? 'Manage Subscription' : 'Start 7-Day Free Trial'}
+                     {user ? 'Manage Subscription' : 'Start Now'}
                  </button>
-                 <p className="text-center text-xs text-slate-500 mt-4">No credit card required for demo.</p>
              </div>
          </div>
       </div>
@@ -747,6 +699,42 @@ const App: React.FC = () => {
                           ))
                       )}
                   </div>
+              </div>
+          </div>
+      )}
+
+      {/* Paywall Modal */}
+      {showPaywallModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in-up">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 text-center relative overflow-hidden">
+                  {/* Decorative Blur */}
+                  <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-indigo-100 rounded-full blur-3xl opacity-50"></div>
+                  
+                  <button onClick={() => setShowPaywallModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 z-10">
+                      <X size={24} />
+                  </button>
+                  
+                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 relative z-10">
+                      <Zap size={32} fill="currentColor" />
+                  </div>
+                  
+                  <h2 className="text-2xl font-bold text-slate-900 mb-2 relative z-10">Unlock Unlimited Quotes</h2>
+                  <p className="text-lg font-bold text-indigo-600 mb-4 relative z-10">— Just $29/mo</p>
+                  <p className="text-slate-500 mb-8 relative z-10">Instant setup. Cancel anytime.</p>
+                  
+                  <button 
+                      onClick={() => {
+                          setShowPaywallModal(false);
+                          if (user) {
+                              setCurrentView('billing');
+                          } else {
+                              setCurrentView('login');
+                          }
+                      }}
+                      className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20 relative z-10"
+                  >
+                      Upgrade Now
+                  </button>
               </div>
           </div>
       )}

@@ -11,11 +11,11 @@ import {
   ArrowLeft, 
   LogOut,
   MoreHorizontal,
-  Clock,
   Building,
   Phone,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Zap
 } from 'lucide-react';
 
 interface BillingPortalProps {
@@ -43,14 +43,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
   const [companyAddress, setCompanyAddress] = useState(user?.companyAddress || '');
   const [settingsSaved, setSettingsSaved] = useState(false);
 
-  // Calculate trial stats
-  const now = Date.now();
-  const msPerDay = 1000 * 60 * 60 * 24;
-  const daysInTrial = user?.trialStartDate ? Math.floor((now - user.trialStartDate) / msPerDay) : 0;
-  const daysRemaining = Math.max(0, 7 - daysInTrial);
-  
-  const isTrial = user?.status === 'trial';
-  const isExpired = user?.status === 'expired';
+  // Status checks
   const isActive = user?.status === 'active';
 
   // Mock Data
@@ -126,21 +119,19 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         
-        {/* Trial Banner */}
-        {(isTrial || isExpired) && (
-            <div className={`mb-8 p-6 rounded-2xl border flex flex-col lg:flex-row items-center justify-between gap-6 ${isExpired ? 'bg-red-50 border-red-100' : 'bg-indigo-50 border-indigo-100'}`}>
+        {/* Upgrade Banner (If not active) */}
+        {!isActive && (
+            <div className="mb-8 p-6 rounded-2xl border flex flex-col lg:flex-row items-center justify-between gap-6 bg-indigo-50 border-indigo-100">
                 <div className="flex items-center gap-4 w-full lg:w-auto">
-                    <div className={`p-3 rounded-full shrink-0 ${isExpired ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                        <Clock size={24} />
+                    <div className="p-3 rounded-full shrink-0 bg-indigo-100 text-indigo-600">
+                        <Zap size={24} fill="currentColor" />
                     </div>
                     <div>
-                        <h3 className={`font-bold text-lg ${isExpired ? 'text-red-900' : 'text-indigo-900'}`}>
-                            {isExpired ? 'Subscription Expired' : 'Free Trial Active'}
+                        <h3 className="font-bold text-lg text-indigo-900">
+                            Upgrade to Unlimited
                         </h3>
-                        <p className={`${isExpired ? 'text-red-700' : 'text-indigo-700'}`}>
-                            {isExpired 
-                                ? 'Your 7-day trial has ended. Upgrade now to continue generating quotes.' 
-                                : `You have ${daysRemaining} days remaining in your free trial.`}
+                        <p className="text-indigo-700">
+                            Remove the 3-quote limit and get unlimited access.
                         </p>
                     </div>
                 </div>
@@ -166,11 +157,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                         <button 
                             onClick={handleActivate}
                             disabled={activationLoading}
-                            className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center gap-2 ${
-                                isExpired 
-                                ? 'bg-red-600 hover:bg-red-700 text-white shadow-red-200' 
-                                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'
-                            }`}
+                            className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200"
                         >
                             {activationLoading ? 'Redirecting...' : (
                                 <>
@@ -220,28 +207,37 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                 <div className="p-6 border-b border-slate-100 flex justify-between items-start">
                     <div>
                     <div className="flex items-center gap-2 mb-1">
-                        <h2 className="text-lg font-bold text-slate-900">Professional Plan</h2>
+                        <h2 className="text-lg font-bold text-slate-900">Current Plan</h2>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
                             isActive 
                                 ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
-                                : isExpired 
-                                    ? 'bg-red-100 text-red-700 border-red-200'
-                                    : 'bg-amber-100 text-amber-700 border-amber-200'
+                                : 'bg-slate-100 text-slate-600 border-slate-200'
                         }`}>
-                            {isActive ? 'ACTIVE' : isExpired ? 'EXPIRED' : 'TRIAL'}
+                            {isActive ? 'PRO' : 'FREE TIER'}
                         </span>
                     </div>
-                    <p className="text-slate-500 text-sm">Unlimited quotes, history storage, and priority support.</p>
+                    <p className="text-slate-500 text-sm">
+                        {isActive 
+                            ? "Unlimited quotes, history storage, and priority support."
+                            : "Limited to 3 quotes."
+                        }
+                    </p>
                     </div>
                     <div className="text-right">
-                    <div className="text-2xl font-bold text-slate-900">$29.00</div>
+                    <div className="text-2xl font-bold text-slate-900">{isActive ? '$29.00' : '$0.00'}</div>
                     <div className="text-xs text-slate-400">/ month</div>
                     </div>
                 </div>
                 <div className="bg-slate-50 px-6 py-4 flex justify-between items-center">
                     <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <Calendar size={16} className="text-slate-400" />
-                    <span>Renews on <strong>{nextBillingDate.toLocaleDateString()}</strong></span>
+                        {isActive ? (
+                             <>
+                                <Calendar size={16} className="text-slate-400" />
+                                <span>Renews on <strong>{nextBillingDate.toLocaleDateString()}</strong></span>
+                             </>
+                        ) : (
+                             <span>Upgrade to unlock unlimited access.</span>
+                        )}
                     </div>
                     {isActive && (
                         <button 
@@ -343,10 +339,10 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                     <div>
                     <div className="flex justify-between text-sm mb-2">
                         <span className="text-slate-300">Quotes Generated</span>
-                        <span className="font-bold">Unlimited</span>
+                        <span className="font-bold">{isActive ? 'Unlimited' : 'Limited (3 max)'}</span>
                     </div>
                     <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div className="bg-indigo-500 h-2 rounded-full w-full"></div>
+                        <div className={`h-2 rounded-full w-full ${isActive ? 'bg-indigo-500' : 'bg-slate-500'}`}></div>
                     </div>
                     </div>
                     <div>
