@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../shared-types';
+import { STRIPE_LINKS } from '../constants';
 import { 
   CreditCard, 
   Download, 
@@ -21,20 +22,11 @@ interface BillingPortalProps {
   user: User | null;
   onBack: () => void;
   onLogout: () => void;
-  onActivate: () => void;
   onUpdateUser: (user: User) => void;
   initialBillingCycle?: 'monthly' | 'yearly';
 }
 
 type Tab = 'billing' | 'settings';
-
-// ============================================================================
-// ⚡️ STRIPE CONFIGURATION
-// ============================================================================
-const STRIPE_LINKS = {
-    monthly: 'https://buy.stripe.com/8x28wP4zO19b8yx2cV8Vi0F', 
-    yearly: 'https://buy.stripe.com/dRm14nd6k7xz0213gZ8Vi0G'
-};
 
 export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, initialBillingCycle = 'monthly' }) => {
   const [activeTab, setActiveTab] = useState<Tab>('billing');
@@ -193,10 +185,13 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                                 </>
                             )}
                         </button>
-                        {/* Dev Helper */}
+                        
+                        {/* Dev Helper - Commented out for production */}
+                        {/* 
                         <button onClick={handleSimulateSuccess} className="text-[10px] opacity-40 hover:opacity-100 underline">
                             Simulate Success
-                        </button>
+                        </button> 
+                        */}
                     </div>
                 </div>
             </div>
@@ -510,4 +505,4 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
       </main>
     </div>
   );
-};
+}

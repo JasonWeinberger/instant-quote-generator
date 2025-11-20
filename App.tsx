@@ -6,7 +6,7 @@ import { IndustrySelector } from './components/IndustrySelector';
 import { QuoteResultCard } from './components/QuoteResultCard';
 import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
-import { Loader2, AlertCircle, Zap, History, Check, Star, Shield, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Lock, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Shield, AlertTriangle } from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
 const TRIAL_DURATION_DAYS = 7;
@@ -158,7 +158,7 @@ const App: React.FC = () => {
              // We depend on 'user' being populated by the Auth Listener first.
              
              // Capture client locally to enforce non-null in closure
-             const client = supabase;
+             const client = supabase!;
              
              client.auth.getUser().then(async ({ data: { user: authUser } }) => {
                  if (authUser) {
@@ -375,13 +375,6 @@ const App: React.FC = () => {
       }
   };
 
-  const handleActivateSubscription = () => {
-      if (!user) return;
-      // This is usually triggered by the Stripe callback, but if manual:
-      const updatedUser: User = { ...user, status: 'active' };
-      handleUpdateUser(updatedUser);
-  };
-
   // Demo Mode for User Preview
   const handleDemoBilling = () => {
       const demoUser: User = {
@@ -409,7 +402,6 @@ const App: React.FC = () => {
             user={user} 
             onBack={() => setCurrentView('landing')} 
             onLogout={handleLogout} 
-            onActivate={handleActivateSubscription}
             onUpdateUser={handleUpdateUser}
             initialBillingCycle={billingCycle}
         />
@@ -495,310 +487,275 @@ const App: React.FC = () => {
       <div className="relative pt-16 pb-20 lg:pt-24 lg:pb-28 bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center max-w-3xl mx-auto mb-12">
-            <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight mb-6">
-              Turn Jobs Into Quotes <br/>
-              <span className="text-indigo-600">in Seconds.</span>
-            </h1>
-            <p className="text-lg sm:text-xl text-slate-500 mb-8 leading-relaxed">
-              The fastest way for contractors to create professional estimates.
-            </p>
-            <div className="flex items-center justify-center gap-6 text-sm text-slate-500 font-medium">
-                <div className="flex items-center gap-1.5"><Check size={16} className="text-green-500" /> No Signup Required</div>
-                <div className="flex items-center gap-1.5"><Check size={16} className="text-green-500" /> AI Powered</div>
-                <div className="flex items-center gap-1.5"><Check size={16} className="text-green-500" /> Instant Results</div>
+            <div className="inline-flex items-center gap-2 bg-indigo-50 border border-indigo-100 px-3 py-1 rounded-full text-xs font-bold text-indigo-600 mb-6 uppercase tracking-wider">
+               <Zap size={14} fill="currentColor" /> AI-Powered Estimation
             </div>
+            <h1 className="text-5xl font-extrabold text-slate-900 tracking-tight mb-6 leading-tight">
+              Accurate <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-500">Construction Quotes</span> in Seconds
+            </h1>
+            <p className="text-xl text-slate-500 mb-8">
+              Stop spending hours on paperwork. Generate professional, itemized estimates for roofing, HVAC, and more instantly.
+            </p>
           </div>
 
-          {/* Main App Container - Styled like a Converter */}
-          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl shadow-indigo-100 border border-slate-200 overflow-hidden">
-            {apiKeyMissing && (
-              <div className="bg-amber-50 p-4 text-center border-b border-amber-100 text-amber-800 text-sm">
-                 Warning: API Key is missing. The generator will not function.
-              </div>
-            )}
-
-            {isTrialExpired && (
-                 <div className="bg-red-50 p-4 text-center border-b border-red-100 text-red-800 text-sm font-medium flex justify-center items-center gap-2">
-                    <Clock size={16} /> Your 7-day free trial has expired. Please upgrade to continue generating quotes.
+          {/* Main Card */}
+          <div className="max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+            <div className="p-8 sm:p-10">
+              
+              {!user && (
+                 <div className="mb-8 flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <div className="text-sm text-slate-600">
+                        <span className="font-bold text-slate-900">{guestQuotesRemaining} free quotes</span> remaining
+                    </div>
+                    <div className="flex gap-1">
+                        {[...Array(MAX_FREE_QUOTES)].map((_, i) => (
+                            <div key={i} className={`h-2 w-8 rounded-full ${i < usageCount ? 'bg-slate-200' : 'bg-indigo-500'}`}></div>
+                        ))}
+                    </div>
                  </div>
-            )}
+              )}
 
-            {/* Top Controls: Industry & Stats */}
-            <div className="bg-slate-50 p-4 sm:p-6 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                  <IndustrySelector selected={industry} onSelect={setIndustry} disabled={isLoading || isTrialExpired} />
-                  
-                  {/* Location Input */}
-                  <div className="relative w-full sm:w-32">
+              {apiKeyMissing && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium flex items-center gap-3">
+                   <AlertTriangle size={20} />
+                   <span>System Error: API Key Not Configured.</span>
+                </div>
+              )}
+
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Industry</label>
+                  <IndustrySelector 
+                    selected={industry} 
+                    onSelect={setIndustry} 
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Job Details</label>
+                  <textarea
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    placeholder="e.g. Replace asphalt shingle roof on 2,500 sq ft home. 4/12 pitch, 1 layer tear-off. Include new drip edge and ridge vent."
+                    className="w-full p-4 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[120px] text-slate-900 placeholder-slate-400 resize-y transition-all"
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Zip Code (For Local Rates)</label>
+                  <div className="relative max-w-xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MapPin size={14} className="text-slate-400" />
+                        <MapPin size={18} className="text-slate-400" />
                     </div>
                     <input
-                      type="text"
-                      value={zipCode}
-                      onChange={(e) => setZipCode(e.target.value)}
-                      placeholder="Zip Code*"
-                      className="block w-full pl-9 pr-3 py-2 border border-slate-200 rounded-full text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400 disabled:bg-slate-100 disabled:text-slate-400"
-                      disabled={isLoading || isTrialExpired}
+                        type="text"
+                        value={zipCode}
+                        onChange={(e) => setZipCode(e.target.value)}
+                        placeholder="e.g. 90210"
+                        className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        disabled={isLoading}
                     />
                   </div>
                 </div>
 
-                {/* Status Badge Logic */}
-                <div className={`text-xs font-bold px-3 py-1 rounded-full border shadow-sm whitespace-nowrap ${
-                    user 
-                        ? (user.status === 'expired' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200') 
-                        : 'bg-white text-slate-500 border-slate-200'
-                }`}>
-                    {user ? (
-                        user.status === 'active' ? 'UNLIMITED PLAN' :
-                        user.status === 'trial' ? 'FREE TRIAL ACTIVE' : 'TRIAL EXPIRED'
-                    ) : `${guestQuotesRemaining} FREE ${guestQuotesRemaining === 1 ? 'QUOTE' : 'QUOTES'} LEFT`}
-                </div>
-            </div>
-
-            {/* Main Input Area */}
-            <div className="p-6 sm:p-8">
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Job Description / Notes</label>
-                <textarea 
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                    placeholder={`e.g. "Install 500sqft of hardwood flooring in living room, remove old carpet, include baseboards."`}
-                    className="w-full h-40 p-4 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all resize-none text-base disabled:bg-slate-50 disabled:text-slate-400"
-                    disabled={isLoading || isTrialExpired}
-                />
-                
                 {error && (
-                    <div className="mt-4 p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2">
-                        <AlertCircle size={16} /> {error}
+                    <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium flex items-start gap-3">
+                        <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                        {error}
                     </div>
                 )}
 
-                <div className="mt-6">
-                    {isLoading ? (
-                        <button disabled className="w-full font-bold text-lg py-4 px-8 rounded-xl shadow-lg bg-indigo-600 text-white shadow-indigo-200 flex items-center justify-center gap-2 opacity-80 cursor-wait">
-                            <Loader2 className="animate-spin" /> Analyzing...
-                        </button>
-                    ) : isGuestLimitReached ? (
-                        <button onClick={() => setCurrentView('login')} className="w-full font-bold text-lg py-4 px-8 rounded-xl shadow-lg bg-slate-900 hover:bg-slate-800 text-white shadow-slate-200 flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5">
-                            <Lock size={20} /> Start 7-Day Free Trial
-                        </button>
-                    ) : isTrialExpired ? (
-                        <button onClick={() => setCurrentView('billing')} className="w-full font-bold text-lg py-4 px-8 rounded-xl shadow-lg bg-red-600 hover:bg-red-700 text-white shadow-red-200 flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5">
-                            <Lock size={20} /> Unlock Unlimited Access
-                        </button>
-                    ) : (
-                        <button onClick={handleGenerateClick} className="w-full font-bold text-lg py-4 px-8 rounded-xl shadow-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 flex items-center justify-center gap-2 transition-all transform hover:-translate-y-0.5">
-                            <Zap className="fill-current" /> Generate Quote
-                        </button>
-                    )}
-                </div>
-                
-                {!user && usageCount > 0 && usageCount < MAX_FREE_QUOTES && (
-                    <p className="text-center text-xs text-slate-400 mt-3">
-                        No credit card required. {guestQuotesRemaining} free quotes remaining.
-                    </p>
-                )}
-                {isGuestLimitReached && (
-                     <p className="text-center text-xs text-slate-400 mt-3">
-                        You've used your free guest quotes. Start a trial to continue.
-                    </p>
-                )}
+                <button
+                  onClick={handleGenerateClick}
+                  disabled={isLoading || (isGuestLimitReached && !user) || isTrialExpired}
+                  className={`
+                    w-full py-4 px-6 rounded-xl font-bold text-lg shadow-lg transform transition-all hover:-translate-y-0.5
+                    ${isLoading ? 'bg-slate-100 text-slate-400 cursor-wait shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'}
+                    ${((isGuestLimitReached && !user) || isTrialExpired) ? 'opacity-50 cursor-not-allowed hover:translate-y-0' : ''}
+                    flex items-center justify-center gap-3
+                  `}
+                >
+                  {isLoading ? (
+                    <>
+                        <Loader2 className="animate-spin" size={20} /> Generating Estimate...
+                    </>
+                  ) : (isGuestLimitReached && !user) ? (
+                    <>Limit Reached - Sign In Free</>
+                  ) : isTrialExpired ? (
+                    <>Trial Expired - Upgrade Now</>
+                  ) : (
+                    <>
+                        Generate Quote <ArrowRight size={20} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            
+            {/* Footer of Card */}
+            <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
+                <p className="text-xs text-slate-400 flex items-center justify-center gap-1">
+                    <Shield size={12} /> Private & Secure. We don't share your data.
+                </p>
             </div>
           </div>
-
-          {/* Results Section */}
-          {result && (
-              <div ref={resultRef} className="max-w-4xl mx-auto mt-12">
-                <div className="flex items-center gap-2 mb-6 justify-center">
-                    <div className="h-px bg-slate-200 w-full"></div>
-                    <span className="text-slate-400 text-xs font-bold uppercase tracking-wider whitespace-nowrap px-2">Your Estimate</span>
-                    <div className="h-px bg-slate-200 w-full"></div>
-                </div>
-                <QuoteResultCard result={result} user={user} />
-              </div>
-          )}
-
         </div>
       </div>
 
-      {/* Features Grid */}
-      <div ref={featuresRef} className="py-20 bg-slate-50 border-y border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-                <h2 className="text-3xl font-bold text-slate-900">Why Contractors Use Instant Quote Generator</h2>
-                <p className="mt-4 text-slate-500 max-w-2xl mx-auto">Stop spending nights doing paperwork. Get 90% of the way there in 10 seconds.</p>
-            </div>
-            <div className="grid md:grid-cols-3 gap-8">
-                {[
-                    { title: "Instant Estimates", desc: "Powered by advanced AI to give you realistic price ranges based on US market data.", icon: <Zap size={24} className="text-indigo-600" /> },
-                    { title: "Client-Ready Format", desc: "Generates professional text you can copy straight into an email or SMS.", icon: <Star size={24} className="text-indigo-600" /> },
-                    { title: "Secure & Private", desc: "We don't store your client data. Your business stays your business.", icon: <Shield size={24} className="text-indigo-600" /> }
-                ].map((feature, i) => (
-                    <div key={i} className="bg-white p-8 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all">
-                        <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mb-4">
-                            {feature.icon}
-                        </div>
-                        <h3 className="text-xl font-bold text-slate-900 mb-2">{feature.title}</h3>
-                        <p className="text-slate-500 leading-relaxed">{feature.desc}</p>
-                    </div>
-                ))}
-            </div>
-        </div>
+      {/* Result Section */}
+      {result && (
+          <div ref={resultRef} className="py-16 bg-slate-100 border-y border-slate-200">
+              <div className="max-w-3xl mx-auto px-4">
+                  <div className="mb-8 text-center">
+                      <h2 className="text-3xl font-bold text-slate-900">Your Estimate is Ready</h2>
+                      <p className="text-slate-500 mt-2">Review, edit, and copy this quote directly to your client.</p>
+                  </div>
+                  <QuoteResultCard result={result} user={user} />
+              </div>
+          </div>
+      )}
+
+      {/* Features Section */}
+      <div ref={featuresRef} className="py-24 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="text-center mb-16">
+                  <h2 className="text-3xl font-bold text-slate-900">Built for Modern Contractors</h2>
+                  <p className="text-slate-500 mt-4 max-w-2xl mx-auto">
+                      Stop guessing prices. Our AI analyzes thousands of local data points to give you accurate, competitive estimates in seconds.
+                  </p>
+              </div>
+              
+              <div className="grid md:grid-cols-3 gap-8">
+                  {[
+                      {
+                          title: "Local Pricing Engine",
+                          desc: "Rates are adjusted based on the specific zip code provided.",
+                          icon: <MapPin size={24} className="text-indigo-600" />
+                      },
+                      {
+                          title: "Client-Ready Text",
+                          desc: "Get a professionally written message ready to copy/paste into SMS or Email.",
+                          icon: <Check size={24} className="text-indigo-600" />
+                      },
+                      {
+                          title: "Itemized Breakdowns",
+                          desc: "Clear separation of materials, labor, and overhead costs.",
+                          icon: <LayoutTemplate size={24} className="text-indigo-600" />
+                      }
+                  ].map((feature, i) => (
+                      <div key={i} className="p-8 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-100 transition-colors">
+                          <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-6">
+                              {feature.icon}
+                          </div>
+                          <h3 className="text-xl font-bold text-slate-900 mb-3">{feature.title}</h3>
+                          <p className="text-slate-500 leading-relaxed">{feature.desc}</p>
+                      </div>
+                  ))}
+              </div>
+          </div>
       </div>
 
       {/* Pricing Section */}
-      <div ref={pricingRef} className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold text-slate-900">Simple, Transparent Pricing</h2>
-                <p className="mt-4 text-slate-500">Start for free, upgrade when you grow.</p>
-            </div>
+      <div ref={pricingRef} className="py-24 bg-slate-900 text-white">
+         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+             <div className="text-center mb-16">
+                 <h2 className="text-3xl font-bold">Simple, Transparent Pricing</h2>
+                 <p className="text-slate-400 mt-4">Start with a free trial. Cancel anytime.</p>
+             </div>
 
-            {/* Billing Toggle */}
-            <div className="flex justify-center mb-12">
-                <div className="bg-slate-100 p-1 rounded-xl inline-flex relative">
-                    <button 
-                        onClick={() => setBillingCycle('monthly')}
-                        className={`relative z-10 px-6 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${billingCycle === 'monthly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                    >
-                        Monthly
-                    </button>
-                    <button 
-                        onClick={() => setBillingCycle('yearly')}
-                        className={`relative z-10 px-6 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${billingCycle === 'yearly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
-                    >
-                        Yearly <span className="text-xs text-green-600 font-bold ml-1">-15%</span>
-                    </button>
-                </div>
-            </div>
+             <div className="max-w-lg mx-auto bg-slate-800 rounded-3xl border border-slate-700 p-8 sm:p-12 relative overflow-hidden">
+                 <div className="absolute top-0 right-0 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">
+                     Best Value
+                 </div>
+                 <div className="text-center mb-8">
+                     <h3 className="text-xl font-medium text-slate-300">Pro Contractor</h3>
+                     <div className="mt-4 flex items-baseline justify-center gap-1">
+                         <span className="text-5xl font-bold text-white">$29</span>
+                         <span className="text-slate-400">/mo</span>
+                     </div>
+                     <p className="text-slate-400 mt-4 text-sm">Everything you need to scale your business.</p>
+                 </div>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                {/* Free Tier */}
-                <div className="bg-white p-8 rounded-3xl border border-slate-200 relative">
-                    <h3 className="text-xl font-bold text-slate-900">Starter</h3>
-                    <div className="mt-4 mb-6">
-                        <span className="text-4xl font-extrabold text-slate-900">$0</span>
-                        <span className="text-slate-500">/forever</span>
-                    </div>
-                    <ul className="space-y-4 mb-8">
-                        <li className="flex items-center gap-3 text-slate-600"><Check size={18} className="text-indigo-600" /> 3 Free Estimates</li>
-                        <li className="flex items-center gap-3 text-slate-600"><Check size={18} className="text-indigo-600" /> Basic Cost Breakdown</li>
-                        <li className="flex items-center gap-3 text-slate-600"><Check size={18} className="text-indigo-600" /> No Credit Card Required</li>
-                    </ul>
-                    <button disabled className="w-full py-3 px-6 rounded-xl bg-slate-100 text-slate-400 font-medium cursor-default">Included</button>
-                </div>
+                 <ul className="space-y-4 mb-8">
+                     {[
+                         "Unlimited AI Quotes",
+                         "Save & Export History",
+                         "Custom Company Branding",
+                         "Priority Support",
+                         "7-Day Free Trial"
+                     ].map((item, i) => (
+                         <li key={i} className="flex items-center gap-3 text-slate-300">
+                             <Check size={18} className="text-indigo-400" /> {item}
+                         </li>
+                     ))}
+                 </ul>
 
-                {/* Pro Tier */}
-                <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 relative shadow-2xl transform md:-translate-y-4">
-                    {billingCycle === 'yearly' && (
-                        <div className="absolute top-0 right-0 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl rounded-tr-2xl">BEST VALUE</div>
-                    )}
-                    <h3 className="text-xl font-bold text-white">Professional</h3>
-                    <div className="mt-4 mb-6">
-                        <span className="text-4xl font-extrabold text-white">
-                            {billingCycle === 'monthly' ? '$29' : '$299'}
-                        </span>
-                        <span className="text-slate-400">
-                            /{billingCycle === 'monthly' ? 'month' : 'year'}
-                        </span>
-                    </div>
-                    <ul className="space-y-4 mb-8">
-                        <li className="flex items-center gap-3 text-slate-300"><Check size={18} className="text-indigo-400" /> Unlimited Estimates</li>
-                        <li className="flex items-center gap-3 text-slate-300"><Check size={18} className="text-indigo-400" /> Save & Export History</li>
-                        <li className="flex items-center gap-3 text-slate-300"><Check size={18} className="text-indigo-400" /> Priority Processing</li>
-                        <li className="flex items-center gap-3 text-slate-300"><Check size={18} className="text-indigo-400" /> Remove Watermarks</li>
-                    </ul>
-                    <button onClick={() => setCurrentView('login')} className="block w-full text-center py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-lg shadow-indigo-900/50">
-                        Start 7-Day Free Trial
-                    </button>
-                    <p className="text-center text-slate-500 text-xs mt-4">Cancel anytime. No questions asked.</p>
-                </div>
-            </div>
-        </div>
+                 <button 
+                    onClick={() => user ? setCurrentView('billing') : setCurrentView('login')}
+                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-900/50"
+                 >
+                     {user ? 'Manage Subscription' : 'Start 7-Day Free Trial'}
+                 </button>
+                 <p className="text-center text-xs text-slate-500 mt-4">No credit card required for demo.</p>
+             </div>
+         </div>
       </div>
-
-      {/* FAQ Section */}
-      <div className="py-20 bg-slate-50 border-t border-slate-200">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold text-slate-900 mb-8 text-center">Frequently Asked Questions</h2>
-            <div className="space-y-4">
-                {[
-                    { q: "How accurate are the estimates?", a: "Estimates are based on average national data. They are excellent starting points but should always be verified against local material costs and labor rates." },
-                    { q: "Is my data private?", a: "Yes. We do not store your client's details or the job descriptions on our servers permanently. History is stored locally on your device." },
-                    { q: "Can I cancel my subscription?", a: "Absolutely. You can cancel anytime from your account settings. You'll keep access until the end of your billing period." },
-                    { q: "Can I use this for any trade?", a: "Currently we support Roofing, HVAC, Plumbing, Electrical, and Painting. More trades are coming soon." }
-                ].map((faq, i) => (
-                    <div key={i} className="bg-white p-6 rounded-xl border border-slate-200">
-                        <h3 className="font-bold text-slate-900 mb-2">{faq.q}</h3>
-                        <p className="text-slate-600 text-sm">{faq.a}</p>
-                    </div>
-                ))}
-            </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer className="bg-white py-12 border-t border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-            <div className="flex items-center justify-center gap-2 mb-4 opacity-50">
-                <LayoutTemplate size={20} />
-                <span className="font-bold text-lg">Instant Quote Generator</span>
-            </div>
-            <p className="text-slate-400 text-sm mb-8">© {new Date().getFullYear()} Instant Quote Generator. All rights reserved.</p>
-            <div className="flex justify-center gap-6 text-sm text-slate-500">
-                <a href="#" className="hover:text-indigo-600">Privacy Policy</a>
-                <a href="#" className="hover:text-indigo-600">Terms of Service</a>
-                <a href="#" className="hover:text-indigo-600">Contact</a>
-            </div>
-            
-            {/* Developer Shortcuts */}
-            <div className="mt-8 pt-8 border-t border-slate-100 text-center">
-                <button onClick={handleDemoBilling} className="text-xs text-slate-300 hover:text-indigo-500 transition-colors">
-                    [Dev] Preview Billing Portal
-                </button>
-            </div>
-        </div>
-      </footer>
 
       {/* History Modal */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-900 flex items-center gap-2"><History size={18} /> Quote History</h3>
-                    <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} /></button>
-                </div>
-                <div className="overflow-y-auto p-4 space-y-3">
-                    {history.length === 0 ? (
-                        <div className="text-center py-12 text-slate-400">No quotes generated yet.</div>
-                    ) : (
-                        history.map((item) => (
-                            <div key={item.id} onClick={() => () => {
-                                setIndustry(item.industry);
-                                setJobDescription(item.jobDescription);
-                                setZipCode(item.zipCode || '');
-                                setResult(item);
-                                setShowHistoryModal(false);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }} className="p-4 rounded-xl border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 cursor-pointer transition-all group">
-                                <div className="flex justify-between mb-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs font-bold uppercase bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500">{item.industry}</span>
-                                      {item.zipCode && <span className="text-xs text-slate-400 flex items-center"><MapPin size={10} className="mr-0.5"/> {item.zipCode}</span>}
-                                    </div>
-                                    <span className="text-xs text-slate-400">{new Date(item.timestamp).toLocaleDateString()}</span>
-                                </div>
-                                <div className="text-sm font-medium text-slate-900 truncate mb-1">{item.jobDescription}</div>
-                                <div className="text-xs text-indigo-600 font-semibold group-hover:text-indigo-700 flex items-center gap-1">
-                                    View Estimate <ArrowRight size={12} />
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-        </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                      <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                          <History size={20} className="text-slate-400" /> Quote History
+                      </h3>
+                      <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                      {history.length === 0 ? (
+                          <div className="text-center py-12 text-slate-400">
+                              <p>No quotes generated yet.</p>
+                          </div>
+                      ) : (
+                          history.map((item) => (
+                              <div key={item.id} className="bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors">
+                                  <div className="flex justify-between items-start mb-2">
+                                      <div>
+                                          <span className="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">
+                                              {item.industry}
+                                          </span>
+                                          <span className="ml-2 text-xs text-slate-400">
+                                              {new Date(item.timestamp).toLocaleDateString()}
+                                          </span>
+                                      </div>
+                                      <div className="text-right font-bold text-slate-900">
+                                          ${item.priceRange.low.toLocaleString()} - ${item.priceRange.high.toLocaleString()}
+                                      </div>
+                                  </div>
+                                  <p className="text-sm text-slate-600 line-clamp-2 mb-3">{item.jobDescription}</p>
+                                  <button 
+                                    onClick={() => {
+                                        setResult(item);
+                                        setIndustry(item.industry);
+                                        setJobDescription(item.jobDescription);
+                                        setZipCode(item.zipCode || '');
+                                        setShowHistoryModal(false);
+                                    }}
+                                    className="text-xs font-bold text-indigo-600 hover:underline"
+                                  >
+                                      Load Quote
+                                  </button>
+                              </div>
+                          ))
+                      )}
+                  </div>
+              </div>
+          </div>
       )}
 
     </div>
