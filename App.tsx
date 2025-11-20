@@ -117,7 +117,6 @@ const App: React.FC = () => {
               checkTrialStatus(u);
           } else {
               // SELF-HEALING: Profile doesn't exist (Trigger failed or manual table creation)
-              // Create the user row manually to ensure app works.
               console.log("User profile missing, creating entry...");
               
               const { error: insertError } = await supabase
@@ -158,9 +157,10 @@ const App: React.FC = () => {
              // REAL MODE: Update DB
              // We depend on 'user' being populated by the Auth Listener first.
              // Use non-null assertion because we checked isSupabaseConfigured
-             supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
+             // Fix: Use ! assertion to tell TS that supabase is not null here.
+             supabase!.auth.getUser().then(async ({ data: { user: authUser } }) => {
                  if (authUser) {
-                     const { error } = await supabase
+                     const { error } = await supabase!
                         .from('users')
                         .update({ status: 'active' })
                         .eq('id', authUser.id);
