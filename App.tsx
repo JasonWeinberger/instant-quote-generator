@@ -81,8 +81,8 @@ const App: React.FC = () => {
                     setShowPaywallModal(true);
                  }
             } else if (event === 'PASSWORD_RECOVERY') {
-                 // Handle password recovery event if necessary, usually supabase handles the session
-                 setCurrentView('billing'); // Or settings to change password
+                 // When user clicks reset link, they are signed in. Redirect to settings to change password.
+                 setCurrentView('billing'); 
             }
         });
         return () => subscription.unsubscribe();
@@ -298,6 +298,15 @@ const App: React.FC = () => {
       }
   };
 
+  const handleUpdatePassword = async (password: string) => {
+      if (isSupabaseConfigured() && supabase) {
+          const { error } = await supabase.auth.updateUser({ password: password });
+          if (error) throw error;
+      } else {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+  };
+
   const handlePaymentSuccessActivation = async (email?: string, password?: string) => {
       if (isSupabaseConfigured() && supabase) {
           let userId = user?.id;
@@ -418,6 +427,7 @@ const App: React.FC = () => {
             onBack={() => setCurrentView('landing')} 
             onLogout={handleLogout} 
             onUpdateUser={handleUpdateUser}
+            onUpdatePassword={handleUpdatePassword}
             initialBillingCycle={billingCycle}
         />
       );
@@ -512,7 +522,7 @@ const App: React.FC = () => {
       {/* Hero Section */}
       <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center max-w-3xl mx-auto mb-12">
+            <div className="text-center max-w-3xl mx-auto mb-10">
                 <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium mb-6 border border-indigo-100">
                     <Zap size={14} fill="currentColor" /> AI-Powered Estimates
                 </div>
@@ -522,64 +532,94 @@ const App: React.FC = () => {
                 <p className="text-xl text-slate-500 mb-8 leading-relaxed">
                     Stop spending nights on paperwork. Select your trade, describe the job, and get a detailed, itemized estimate instantly.
                 </p>
+            </div>
+            
+            {/* Input Area - IMPROVED UI */}
+            <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
                 
-                {/* Input Area */}
-                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-2 sm:p-4 max-w-2xl mx-auto transform transition-all hover:shadow-2xl hover:border-indigo-200">
-                    
-                    <div className="flex flex-col sm:flex-row gap-2 sm:items-center mb-4 px-2">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
+                    {/* Step 1: Industry */}
+                    <div className="md:col-span-8">
+                        <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">1</div>
+                            Select Trade
+                        </label>
                         <IndustrySelector selected={industry} onSelect={setIndustry} disabled={isLoading} />
-                        <div className="w-full sm:w-32 mt-2 sm:mt-0">
-                           <input 
-                              type="text" 
-                              placeholder="Zip Code" 
-                              value={zipCode}
-                              onChange={(e) => setZipCode(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
-                              maxLength={5}
-                           />
+                    </div>
+
+                    {/* Step 2: Zip Code */}
+                    <div className="md:col-span-4">
+                        <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">2</div>
+                            Zip Code
+                        </label>
+                        <div className="relative group">
+                            <MapPin size={18} className="absolute left-3 top-3 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                            <input 
+                                type="text" 
+                                placeholder="e.g. 90210" 
+                                value={zipCode}
+                                onChange={(e) => setZipCode(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all"
+                                maxLength={5}
+                            />
                         </div>
                     </div>
-                    
+                </div>
+
+                {/* Step 3: Description */}
+                <div className="mb-8">
+                    <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">3</div>
+                        Job Description
+                    </label>
                     <div className="relative">
                         <textarea
                             value={jobDescription}
                             onChange={(e) => setJobDescription(e.target.value)}
-                            placeholder={`Describe the job (e.g., "Install 2000sqft asphalt shingle roof on 1-story home, tear off old layer, include flashing")`}
-                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-xl resize-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-base placeholder-slate-400"
+                            placeholder={`Describe the project in detail for the most accurate quote...
+Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear off existing layer. Include synthetic underlayment and new drip edge."`}
+                            className="w-full h-40 p-5 bg-slate-50 border border-slate-200 rounded-2xl resize-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-base placeholder-slate-400 shadow-inner leading-relaxed"
                             disabled={isLoading}
                         />
-                        <div className="absolute bottom-3 right-3 flex items-center gap-3">
-                            {isLimitReached && (
-                                <span className="text-xs font-bold text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100">
-                                    Limit Reached
-                                </span>
-                            )}
-                            {!isLimitReached && (
-                                <span className="text-xs font-medium text-slate-400">
-                                    {quotesRemaining} free quotes left
-                                </span>
-                            )}
-                            <button
-                                onClick={handleGenerateClick}
-                                disabled={isLoading}
-                                className={`
-                                    flex items-center gap-2 px-6 py-2 rounded-lg font-bold text-white transition-all shadow-lg hover:shadow-xl
-                                    ${isLoading ? 'bg-slate-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700 hover:-translate-y-0.5'}
-                                `}
-                            >
-                                {isLoading ? (
-                                    <><Loader2 className="animate-spin" size={18} /> Analyzing...</>
-                                ) : (
-                                    <>Generate Quote <ArrowRight size={18} /></>
-                                )}
-                            </button>
-                        </div>
                     </div>
+                </div>
+
+                {/* Footer Actions */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+                    <div className="text-sm text-slate-500 flex items-center gap-2 order-2 sm:order-1">
+                         {/* Limit logic */}
+                         {isLimitReached ? (
+                             <span className="flex items-center gap-2 text-red-600 font-medium bg-red-50 px-3 py-1 rounded-full border border-red-100">
+                                 <AlertCircle size={16} /> Limit Reached
+                             </span>
+                         ) : (
+                             <span className="flex items-center gap-2 text-slate-500 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
+                                 <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-500'}`}></div>
+                                 {quotesRemaining} free quotes remaining
+                             </span>
+                         )}
+                    </div>
+
+                    <button
+                        onClick={handleGenerateClick}
+                        disabled={isLoading}
+                        className={`
+                            order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-white text-lg shadow-xl shadow-indigo-200 hover:shadow-indigo-300 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-3
+                            ${isLoading ? 'bg-slate-400 cursor-wait' : 'bg-indigo-600 hover:bg-indigo-700'}
+                        `}
+                    >
+                        {isLoading ? (
+                            <><Loader2 className="animate-spin" size={20} /> Analyzing...</>
+                        ) : (
+                            <>Generate Estimate <ArrowRight size={20} /></>
+                        )}
+                    </button>
                 </div>
             </div>
             
             {error && (
-                <div className="max-w-2xl mx-auto mb-8 animate-fade-in-up">
+                <div className="max-w-2xl mx-auto mt-8 animate-fade-in-up">
                     <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3">
                         <AlertCircle className="text-red-500 mt-0.5" size={20} />
                         <div>
@@ -591,7 +631,7 @@ const App: React.FC = () => {
             )}
 
             {/* Result Section */}
-            <div ref={resultRef} className="max-w-3xl mx-auto">
+            <div ref={resultRef} className="max-w-4xl mx-auto mt-12">
                 {result && <QuoteResultCard result={result} user={user} />}
             </div>
 

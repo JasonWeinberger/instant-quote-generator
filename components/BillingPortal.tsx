@@ -5,7 +5,7 @@ import {
   CreditCard, 
   Download, 
   Check, 
-  AlertTriangle, 
+  TriangleAlert, 
   Calendar, 
   Shield, 
   ArrowLeft, 
@@ -16,7 +16,8 @@ import {
   MapPin,
   ExternalLink,
   Zap,
-  Mail
+  Mail,
+  Lock
 } from 'lucide-react';
 
 interface BillingPortalProps {
@@ -24,12 +25,13 @@ interface BillingPortalProps {
   onBack: () => void;
   onLogout: () => void;
   onUpdateUser: (user: User) => void;
+  onUpdatePassword: (password: string) => Promise<void>;
   initialBillingCycle?: 'monthly' | 'yearly';
 }
 
 type Tab = 'billing' | 'settings';
 
-export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, initialBillingCycle = 'monthly' }) => {
+export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, onUpdatePassword, initialBillingCycle = 'monthly' }) => {
   const [activeTab, setActiveTab] = useState<Tab>('billing');
   const [isLoading, setIsLoading] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
@@ -43,6 +45,12 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
   const [companyPhone, setCompanyPhone] = useState(user?.companyPhone || '');
   const [companyAddress, setCompanyAddress] = useState(user?.companyAddress || '');
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Password Update State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSaved, setPasswordSaved] = useState(false);
 
   // Status checks
   const isActive = user?.status === 'active';
@@ -89,6 +97,30 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
       onUpdateUser(updatedUser);
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
+  };
+
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setPasswordError(null);
+      
+      if (newPassword.length < 6) {
+          setPasswordError("Password must be at least 6 characters.");
+          return;
+      }
+      if (newPassword !== confirmPassword) {
+          setPasswordError("Passwords do not match.");
+          return;
+      }
+
+      try {
+          await onUpdatePassword(newPassword);
+          setPasswordSaved(true);
+          setNewPassword('');
+          setConfirmPassword('');
+          setTimeout(() => setPasswordSaved(false), 3000);
+      } catch (err: any) {
+          setPasswordError(err.message || "Failed to update password.");
+      }
   };
 
   return (
@@ -367,18 +399,16 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                     <h3 className="font-bold text-slate-900 mb-2">Support</h3>
                     <p className="text-sm text-slate-600 mb-4">
-                        Support or billing questions?
+                        Support or billing questions?<br/>
+                        Email us at <a href="mailto:support@instantquotegenerator.com" className="text-indigo-600 font-bold hover:underline">support@instantquotegenerator.com</a><br/>
+                        and we’ll respond within 24 hours.
                     </p>
-                    <a href="mailto:support@instantquotegenerator.com" className="flex items-center gap-2 text-indigo-600 font-bold text-sm hover:underline">
-                        <Mail size={16} /> Email Support
-                    </a>
-                    <p className="text-xs text-slate-400 mt-2">We’ll respond within 24 hours.</p>
                 </div>
 
                 {/* Danger Zone */}
                 <div className="border border-red-100 bg-red-50 rounded-2xl p-6">
                 <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
-                    <AlertTriangle size={18} /> Cancel Subscription
+                    <TriangleAlert size={18} /> Cancel Subscription
                 </h3>
                 <p className="text-red-700 text-sm mb-4">
                     Once you cancel, you will lose access to unlimited quotes at the end of your billing period.
@@ -412,7 +442,8 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
             </div>
         ) : (
             /* SETTINGS TAB */
-            <div className="max-w-3xl animate-fade-in-up">
+            <div className="max-w-3xl animate-fade-in-up space-y-8">
+                {/* Business Profile Section */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-100">
                         <h2 className="text-lg font-bold text-slate-900">Business Profile</h2>
@@ -490,6 +521,70 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                              >
                                 {settingsSaved ? <Check size={18} /> : null}
                                 {settingsSaved ? 'Saved!' : 'Save Changes'}
+                             </button>
+                        </div>
+                    </form>
+                </div>
+
+                {/* Security Section (Reset Password) */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100">
+                        <h2 className="text-lg font-bold text-slate-900">Security</h2>
+                        <p className="text-slate-500 text-sm mt-1">
+                            Update your password here.
+                        </p>
+                    </div>
+                    <form onSubmit={handlePasswordUpdate} className="p-6 space-y-6">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                    New Password
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock size={18} className="text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                        placeholder="New password"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                                    Confirm Password
+                                </label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Lock size={18} className="text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="password"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                        placeholder="Confirm password"
+                                    />
+                                </div>
+                            </div>
+                         </div>
+                         
+                         {passwordError && (
+                            <div className="text-sm text-red-600 bg-red-50 p-2 rounded border border-red-100">
+                                {passwordError}
+                            </div>
+                         )}
+
+                         <div className="pt-4 flex items-center justify-end border-t border-slate-100 mt-6">
+                             <button
+                                type="submit"
+                                className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center gap-2"
+                             >
+                                {passwordSaved ? <Check size={18} className="text-green-600" /> : null}
+                                {passwordSaved ? 'Password Updated' : 'Update Password'}
                              </button>
                         </div>
                     </form>
