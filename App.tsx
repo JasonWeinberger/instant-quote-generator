@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  // Removed unused setBillingCycle to fix build error
   const [billingCycle] = useState<BillingCycle>('monthly');
 
   const resultRef = useRef<HTMLDivElement>(null);
@@ -313,6 +314,7 @@ const App: React.FC = () => {
                 email, 
                 password,
                 options: {
+                  // Fix: Ensure email redirects to the correct origin (e.g. port 5173)
                   emailRedirectTo: window.location.origin
                 }
               });
