@@ -1,0 +1,5 @@
+{
+  "name": "Instant Quote Generator",
+  "description": "A micro-SaaS for generating instant roofing quotes using AI.",
+  "requestFramePermissions": []
+}
