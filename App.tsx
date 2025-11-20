@@ -67,13 +67,20 @@ const App: React.FC = () => {
         });
         
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!session) {
                 setUser(null);
             } else {
-                 // Optionally refresh profile on change
+                 // Refresh profile
                  if (!user || user.id !== session.user.id) {
                     await fetchUserProfile(session.user.id, session.user.email || '');
+                 }
+                 
+                 // If user just signed in (e.g. via email link), ensure they are on the landing page
+                 if (event === 'SIGNED_IN') {
+                     // We don't force 'landing' blindly to avoid disrupting navigation, 
+                     // but if they are in a neutral state it helps.
+                     // For now, relying on default state is safer.
                  }
             }
         });
@@ -219,16 +226,12 @@ const App: React.FC = () => {
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
           if (isSignUp) {
-              // Force standard localhost URL if running locally
-              let redirectUrl = window.location.origin;
-              if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-                  redirectUrl = 'http://localhost:3000'; 
-              }
-
+              // We removed the explicit `emailRedirectTo` here.
+              // This forces Supabase to use the "Site URL" configured in the Dashboard.
+              // This prevents the app from accidentally redirecting to localhost when running on a custom domain.
               const { data, error } = await supabase.auth.signUp({ 
                 email, 
-                password,
-                options: { emailRedirectTo: redirectUrl }
+                password
               });
               if (error) throw error;
               if (data.user && !data.session) return { requiresConfirmation: true };

@@ -16,8 +16,8 @@ export const INDUSTRIES: IndustryOption[] = [
 // 2. Create a new link for your product (e.g., "Pro Plan - Monthly").
 // 3. Under "After payment", select "Don't show confirmation page".
 // 4. Enter your redirect URL with the success flag: 
-//    http://localhost:3000/?success=true  (Local Testing)
-//    https://YOUR-APP-URL.vercel.app/?success=true (Production)
+//    https://instantquotegenerator.com/?success=true
+//    (Or http://localhost:3000/?success=true if testing locally)
 // 5. Copy the generated link (starts with buy.stripe.com) and paste it below.
 
 export const STRIPE_LINKS = {
