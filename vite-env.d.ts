@@ -10,8 +10,9 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-// Augment the NodeJS namespace to type process.env correctly without replacing the global process object.
-// This ensures process.env.API_KEY is typed while preserving standard methods like process.cwd().
+// Augment the NodeJS namespace to ensure process.env is typed correctly
+// without shadowing the global process variable. This fixes the "cwd missing"
+// error in vite.config.ts and the "redeclare" error.
 declare namespace NodeJS {
   interface ProcessEnv {
     API_KEY: string;
