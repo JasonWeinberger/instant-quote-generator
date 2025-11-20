@@ -8,7 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Shield, AlertTriangle, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Lock } from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
 
@@ -95,12 +95,13 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Check for Payment Success URL Param
+  // Check for Payment Success URL Param (Supports both 'payment_success' and 'success')
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('payment_success') === 'true') {
+    // We prioritize 'success' as per the new instruction, but keep 'payment_success' for backward compat if needed
+    if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
         setCurrentView('payment_success');
-        // Clean URL
+        // Clean URL so a refresh doesn't trigger it again
         window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -261,51 +262,58 @@ const App: React.FC = () => {
       }
   };
 
-  const handlePaymentSuccessAuth = async (email: string, password: string) => {
+  const handlePaymentSuccessActivation = async (email?: string, password?: string) => {
       if (isSupabaseConfigured() && supabase) {
-          // 1. Create Account
-          const { data, error } = await supabase.auth.signUp({ 
-              email, 
-              password 
-          });
-          
-          if (error) throw error;
+          let userId = user?.id;
 
-          // 2. Ensure User Entry Exists & Set Active
-          if (data.user) {
-             const { error: updateError } = await supabase
-                .from('users')
-                .upsert({ 
-                    id: data.user.id, 
-                    email: email,
-                    status: 'active' // CRITICAL: Set active immediately
-                });
+          // 1. If not logged in, try to login first
+          if (!userId && email && password) {
+              const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+              if (signInError) throw new Error("Could not sign in. Please check credentials.");
+              userId = signInData.user.id;
+          }
+
+          if (!userId) throw new Error("No authenticated user found to activate.");
+
+          // 2. Update User Status to Active
+          const { error: updateError } = await supabase
+            .from('users')
+            .upsert({ 
+                id: userId, 
+                status: 'active' // Unlock account
+            });
              
-             if (updateError) throw updateError;
+          if (updateError) throw updateError;
 
-             // 3. Sign In immediately if session not established (some flows might need explicit sign in)
-             if (!data.session) {
-                 const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-                 if (signInError) throw signInError;
-             }
-
-             // 4. Fetch and Update Local State
-             await fetchUserProfile(data.user.id, email);
-             setCurrentView('billing'); // Go to dashboard
+          // 3. Refresh Profile
+          if (email) { 
+             await fetchUserProfile(userId, email);
+          } else if (user?.email) {
+             await fetchUserProfile(userId, user.email);
           }
       } else {
           // DEMO MODE MOCK
-          const newUser: User = {
-              id: `local_paid_${Date.now()}`,
-              email,
-              plan: 'pro',
-              status: 'active',
-              trialStartDate: Date.now()
-          };
-          setUser(newUser);
-          localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-          setCurrentView('billing');
+          if (user) {
+            const updatedUser: User = { ...user, status: 'active' };
+            setUser(updatedUser);
+            localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
+          } else if (email) {
+              // Fallback for demo mode if somehow lost session
+               const newUser: User = {
+                  id: `local_paid_${Date.now()}`,
+                  email,
+                  plan: 'pro',
+                  status: 'active',
+                  trialStartDate: Date.now()
+              };
+              setUser(newUser);
+              localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
+          }
       }
+      
+      // 4. Redirect to Landing Page
+      setShowPaywallModal(false);
+      setCurrentView('landing');
   };
 
   const handleLogout = async () => {
@@ -341,9 +349,17 @@ const App: React.FC = () => {
     window.location.href = STRIPE_LINKS.monthly;
   };
 
+  const handleUpgradeClick = () => {
+      if (user) {
+          handleStripeRedirect();
+      } else {
+          setCurrentView('login');
+      }
+  };
+
   // View Router
   if (currentView === 'payment_success') {
-      return <PaymentSuccessPage onComplete={handlePaymentSuccessAuth} />;
+      return <PaymentSuccessPage user={user} onActivate={handlePaymentSuccessActivation} />;
   }
 
   if (currentView === 'login') {
@@ -405,7 +421,7 @@ const App: React.FC = () => {
                     <button onClick={() => setCurrentView('login')} className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors">
                         Sign In
                     </button>
-                    <button onClick={handleStripeRedirect} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
+                    <button onClick={handleUpgradeClick} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
                         Get Unlimited
                     </button>
                 </>
@@ -438,7 +454,7 @@ const App: React.FC = () => {
                         <button onClick={() => setCurrentView('login')} className="block w-full text-center py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg">
                             Sign In
                         </button>
-                        <button onClick={handleStripeRedirect} className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg">
+                        <button onClick={handleUpgradeClick} className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg">
                             Get Unlimited
                         </button>
                     </div>
@@ -621,7 +637,7 @@ const App: React.FC = () => {
                           </li>
                       </ul>
 
-                      <button onClick={handleStripeRedirect} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
+                      <button onClick={handleUpgradeClick} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
                           Get Unlimited Access
                       </button>
                   </div>
@@ -661,14 +677,18 @@ const App: React.FC = () => {
                 </div>
 
                 <button 
-                    onClick={handleStripeRedirect}
+                    onClick={user ? handleStripeRedirect : () => setCurrentView('login')}
                     className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200"
                 >
-                    Unlock Unlimited Access <ArrowRight size={18} />
+                    {user ? (
+                        <>Proceed to Payment <ArrowRight size={18} /></>
+                    ) : (
+                        <>Sign Up to Upgrade <ArrowRight size={18} /></>
+                    )}
                 </button>
                 
                 <p className="text-center text-xs text-slate-400 mt-4">
-                    Secure payment via Stripe. Cancel anytime.
+                    {user ? 'Secure payment via Stripe.' : 'You must create an account before upgrading.'}
                 </p>
             </div>
         </div>
