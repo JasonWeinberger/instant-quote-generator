@@ -1,24 +1,9 @@
 import React, { useState } from 'react';
-// Force refresh of import declarations
 import { User } from '../shared-types';
 import { STRIPE_LINKS } from '../constants';
-import { 
-  CreditCard, 
-  Download, 
-  Check, 
-  AlertCircle,
-  Calendar, 
-  Shield, 
-  ArrowLeft, 
-  LogOut,
-  MoreHorizontal,
-  Building,
-  Phone,
-  MapPin,
-  ExternalLink,
-  Zap,
-  Lock
-} from 'lucide-react';
+import { CreditCard, Download, Check, AlertCircle, Calendar, Shield, ArrowLeft, LogOut, MoreHorizontal, Building, Phone, MapPin, ExternalLink, Zap, Lock } from 'lucide-react';
+
+// Force refresh: 1
 
 interface BillingPortalProps {
   user: User | null;

@@ -10,6 +10,7 @@ import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Check, Lock } from 'lucide-react';
 
+// Force refresh: 1
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -208,10 +209,9 @@ const App: React.FC = () => {
       setHistory(updatedHistory);
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
-      // Real DB Insert - REFACTORED FOR TYPESCRIPT SAFETY
+      // Real DB Insert - USING RESPONSE OBJECT TO AVOID TS6133
       if (user && isSupabaseConfigured() && supabase) {
-          // Explicitly destructure and rename error to ensure usage
-          const { error: dbError } = await supabase.from('quotes').insert({
+          const dbResponse = await supabase.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -219,9 +219,8 @@ const App: React.FC = () => {
               result: quoteData
           });
           
-          if (dbError) {
-            // Explicitly use the error variable
-            console.warn("Failed to save quote to database:", dbError.message);
+          if (dbResponse.error) {
+            console.warn("Failed to save quote to database:", dbResponse.error.message);
           }
       }
 
