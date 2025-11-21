@@ -115,7 +115,7 @@ const App: React.FC = () => {
 
       try {
           // Fetch profile from 'users' table
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from('users')
             .select('*')
             .eq('id', userId)
