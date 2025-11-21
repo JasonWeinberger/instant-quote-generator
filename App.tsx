@@ -233,6 +233,7 @@ const App: React.FC = () => {
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
           if (isSignUp) {
+              // DEPRECATED in favor of Payment First flow, but kept for robustness
               const { data, error } = await supabase.auth.signUp({ 
                 email, 
                 password
@@ -412,7 +413,7 @@ const App: React.FC = () => {
             onAuth={handleAuth} 
             onResetPassword={handleResetPassword}
             onBack={() => setCurrentView('landing')} 
-            onUpgrade={() => goToCheckout()}
+            onUpgrade={handleUpgradeClick}
         />
       );
   }
@@ -719,7 +720,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                           </li>
                       </ul>
 
-                      <button onClick={goToCheckout} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
+                      <button type="button" onClick={goToCheckout} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
                           Get Unlimited Access
                       </button>
                   </div>
@@ -759,6 +760,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 </div>
 
                 <button 
+                    type="button"
                     onClick={goToCheckout}
                     className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200"
                 >

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check } from 'lucide-react';
+import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
   onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;
@@ -18,9 +18,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-
-  // We no longer use isSignUp for auth submission here, as signup happens post-payment
-  const isSignUp = false; 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,16 +46,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
     }
 
     try {
-        const result = await onAuth(email, password, isSignUp);
-        // Use type assertion to safely access property on void union type
-        if (result && (result as any).requiresConfirmation) {
-            setNeedsConfirmation(true);
-            setIsLoading(false);
-        }
-        // If no confirmation required, App component handles redirection
+        // Always false for isSignUp, because signup happens after payment
+        await onAuth(email, password, false);
     } catch (err: any) {
         console.error(err);
-        setError(err.message || "Authentication failed. Please try again.");
+        setError(err.message || "Authentication failed. Please check your credentials.");
         setIsLoading(false);
     }
   };
@@ -72,7 +64,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
                  </div>
                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
                  <p className="text-slate-500 mb-8">
-                     We've sent a confirmation link to <strong>{email}</strong>. Please click the link to activate your account.
+                     We've sent a confirmation link to <strong>{email}</strong>.
                  </p>
                  <button
                     onClick={() => {
@@ -84,9 +76,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
                  >
                      Return to Sign In
                  </button>
-                 <p className="text-xs text-slate-400 mt-4">
-                     If you don't see the email, check your spam folder.
-                 </p>
              </div>
         </div>
       );
@@ -130,13 +119,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         </button>
 
         <div className="mx-auto w-full max-w-sm lg:w-96">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-               {authMode === 'signin' ? 'Welcome back' : 'Reset Password'}
-            </h2>
-            <p className="mt-2 text-sm text-slate-500">
-               {authMode === 'signin' ? 'Access your history and settings.' : 'Enter your email to receive a reset link.'}
-            </p>
+          
+          {/* Pro Upsell Card for New Users */}
+          {authMode === 'signin' && (
+            <div className="mb-8 bg-slate-900 rounded-2xl p-6 text-white shadow-xl shadow-slate-200 overflow-hidden relative group cursor-pointer" onClick={onUpgrade}>
+               <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                  <Zap size={80} />
+               </div>
+               <h3 className="font-bold text-lg mb-1">New here?</h3>
+               <p className="text-slate-300 text-sm mb-4">
+                 Purchase unlimited access to create your account.
+               </p>
+               <button 
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+               >
+                 Get Unlimited Access <ArrowRight size={16} />
+               </button>
+            </div>
+          )}
+
+          <div className="text-center mb-8 relative">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-slate-200"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="px-4 bg-white text-sm text-slate-500 font-medium">
+                 {authMode === 'signin' ? 'Or log in to existing account' : 'Reset Password'}
+              </span>
+            </div>
           </div>
 
           <form className="space-y-6 animate-fade-in-up" onSubmit={handleSubmit}>
@@ -212,7 +224,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
             <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed bg-slate-900 hover:bg-slate-800`}
+                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed bg-white text-slate-900 border-slate-300 hover:bg-slate-50`}
             >
                 {isLoading ? 'Processing...' : (
                     authMode === 'signin' ? 'Log In' : 'Send Reset Link'
@@ -222,23 +234,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         </form>
 
           <div className="mt-6 text-center">
-            {authMode === 'forgot' ? (
+            {authMode === 'forgot' && (
                 <button 
                     onClick={() => { setAuthMode('signin'); setError(null); }}
                     className="text-sm font-bold text-indigo-600 hover:text-indigo-500 transition-colors"
                 >
                     Back to Log In
                 </button>
-            ) : (
-                <p className="text-sm text-slate-500">
-                Don't have an account?{' '}
-                <button 
-                    onClick={onUpgrade} 
-                    className="font-bold text-indigo-600 hover:text-indigo-500 transition-colors"
-                >
-                    Get Unlimited Access
-                </button>
-                </p>
             )}
           </div>
         </div>
