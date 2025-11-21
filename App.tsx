@@ -210,7 +210,8 @@ const App: React.FC = () => {
       
       // Real DB Insert
       if (user && isSupabaseConfigured() && supabase) {
-          const { error: dbError } = await supabase.from('quotes').insert({
+          // Using response object instead of destructuring to avoid TS unused variable error
+          const response = await supabase.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -218,7 +219,7 @@ const App: React.FC = () => {
               result: quoteData
           });
           
-          if (dbError) console.warn("Failed to save quote to database:", dbError);
+          if (response.error) console.warn("Failed to save quote to database:", response.error);
       }
 
       setResult(quoteData);
