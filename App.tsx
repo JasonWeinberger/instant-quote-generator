@@ -8,12 +8,25 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
 // Force refresh: 3
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
+
+const BrandLogo: React.FC = () => (
+  <div className="relative w-11 h-11 bg-[#003366] rounded-full flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-white ring-1 ring-slate-900/10">
+    {/* Inner White Ring */}
+    <div className="absolute inset-[3px] rounded-full border-2 border-white"></div>
+    
+    {/* Tools */}
+    <div className="relative w-full h-full flex items-center justify-center z-10">
+        <Hammer className="absolute w-5 h-5 text-white -translate-x-[1px] -translate-y-[1px] scale-x-[-1] rotate-12" strokeWidth={2.5} />
+        <Wrench className="absolute w-5 h-5 text-white translate-x-[1px] translate-y-[1px] -rotate-12" strokeWidth={2.5} />
+    </div>
+  </div>
+);
 
 const App: React.FC = () => {
   // State
@@ -424,7 +437,7 @@ const App: React.FC = () => {
             user={user} 
             onBack={() => setCurrentView('landing')} 
             onLogout={handleLogout} 
-            onUpdateUser={handleUpdateUser}
+            onUpdateUser={handleUpdateUser} 
             onUpdatePassword={handleUpdatePassword}
         />
       );
@@ -443,10 +456,8 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              <div className="bg-indigo-600 p-1.5 rounded-lg mr-2">
-                <LayoutTemplate className="h-5 w-5 text-white" />
-              </div>
-              <span className="font-bold text-xl tracking-tight text-slate-900">Instant <span className="text-indigo-600">Quote Generator</span></span>
+              <BrandLogo />
+              <span className="ml-3 font-bold text-xl tracking-tight text-slate-900">Instant <span className="text-indigo-600">Quote Generator</span></span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
@@ -520,14 +531,11 @@ const App: React.FC = () => {
       <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center max-w-3xl mx-auto mb-10">
-                <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium mb-6 border border-indigo-100">
-                    <Zap size={14} fill="currentColor" /> AI-Powered Estimates
-                </div>
                 <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-6 leading-tight">
-                    Generate accurate construction quotes <span className="text-indigo-600">in seconds.</span>
+                    Generate Accurate Job Quotes <span className="text-indigo-600">in Seconds.</span>
                 </h1>
                 <p className="text-xl text-slate-500 mb-8 leading-relaxed">
-                    Stop spending nights on paperwork. Select your trade, describe the job, and get a detailed, itemized estimate instantly.
+                    Stop losing evenings to paperwork. Select your trade, describe the job, and get a clean, itemized estimate instantly.
                 </p>
             </div>
             
@@ -755,9 +763,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="flex flex-col md:flex-row items-center gap-6">
                     <div className="flex items-center gap-2">
-                        <div className="bg-slate-900 p-1.5 rounded-lg">
-                            <LayoutTemplate className="h-5 w-5 text-white" />
-                        </div>
+                        <BrandLogo />
                         <span className="font-bold text-lg text-slate-900">Instant Quote Generator</span>
                     </div>
                     <a href="mailto:support@instantquotegenerator.com" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
@@ -830,51 +836,52 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300 relative">
                   <button 
                     onClick={() => setShowPaywallModal(false)}
-                    className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-slate-100 text-slate-500 rounded-full transition-colors z-10"
+                    className="absolute top-4 right-4 p-2 bg-white/50 hover:bg-slate-100 rounded-full text-slate-500 transition-colors z-10"
                   >
-                      <X size={20} />
+                    <X size={20} />
                   </button>
                   
-                  <div className="bg-slate-900 text-white p-8 text-center relative overflow-hidden">
-                      <div className="absolute inset-0 opacity-10">
-                          <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                            <path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" />
-                          </svg>
+                  <div className="bg-indigo-600 p-8 text-center text-white relative overflow-hidden">
+                      <div className="absolute inset-0 opacity-20">
+                           <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                             <path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" />
+                           </svg>
                       </div>
                       <div className="relative z-10">
-                        <div className="w-16 h-16 bg-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/30">
-                            <Zap size={32} />
-                        </div>
-                        <h3 className="text-2xl font-bold mb-2">Daily Limit Reached</h3>
-                        <p className="text-slate-300">
-                            You've used your {MAX_FREE_QUOTES} free quotes for today.
-                        </p>
+                           <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-white/30">
+                              <Zap size={32} className="text-white" />
+                           </div>
+                           <h2 className="text-2xl font-bold mb-2">Usage Limit Reached</h2>
+                           <p className="text-indigo-100">
+                               You've used all {MAX_FREE_QUOTES} free quotes for today.
+                           </p>
                       </div>
                   </div>
-                  
-                  <div className="p-8">
-                      <div className="space-y-4 mb-8">
+
+                  <div className="p-8 text-center">
+                      <h3 className="text-lg font-bold text-slate-900 mb-4">Upgrade for Unlimited Access</h3>
+                      <ul className="text-left space-y-3 mb-8 max-w-xs mx-auto">
                           {[
-                              "Unlimited estimates",
-                              "Save history forever",
-                              "Remove daily limits",
-                              "Priority processing"
-                          ].map((item, i) => (
-                              <div key={i} className="flex items-center gap-3 text-slate-700">
-                                  <Check size={18} className="text-indigo-600 shrink-0" />
-                                  <span className="font-medium">{item}</span>
-                              </div>
+                             "Unlimited AI Estimates",
+                             "Save & Export History",
+                             "Company Branding on Quotes"
+                          ].map((feat, i) => (
+                              <li key={i} className="flex items-center gap-3 text-slate-600">
+                                  <Check size={16} className="text-green-500 shrink-0" />
+                                  <span className="text-sm">{feat}</span>
+                              </li>
                           ))}
-                      </div>
+                      </ul>
                       
                       <button 
                         onClick={handleUpgradeClick}
-                        className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1 text-lg flex items-center justify-center gap-2"
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-4"
                       >
-                          Get Unlimited Access <ArrowRight size={20} />
+                          Get Unlimited Access <ArrowRight size={18} />
                       </button>
-                      <p className="text-center text-xs text-slate-400 mt-4">
-                          Just $29/month. Cancel anytime.
+                      
+                      <p className="text-xs text-slate-400">
+                          One-time setup. Cancel anytime.
                       </p>
                   </div>
               </div>
