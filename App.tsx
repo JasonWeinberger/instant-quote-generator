@@ -73,7 +73,7 @@ const App: React.FC = () => {
             } else if (event === 'SIGNED_IN') {
                  // Explicitly handle sign-in redirect if needed, or just state update
                  // If coming from email link, session is now active
-                 if (!user || user.id !== session.user.id) {
+                 if (session && (!user || user.id !== session.user.id)) {
                     await fetchUserProfile(session.user.id, session.user.email || '');
                  }
             } else if (event === 'PASSWORD_RECOVERY') {
@@ -115,6 +115,7 @@ const App: React.FC = () => {
 
       try {
           // Fetch profile from 'users' table
+          // Ensure no unused variables here
           const { data } = await supabase
             .from('users')
             .select('*')
