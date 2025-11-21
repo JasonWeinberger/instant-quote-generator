@@ -83,6 +83,13 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         <div className="p-8">
           <div className="mb-6 text-center">
               <h3 className="text-xl font-bold text-slate-900 mb-2">Set Up Your Pro Account</h3>
+              <div className="bg-red-50 border border-red-100 text-red-800 p-4 rounded-lg text-xs text-left mb-4 flex gap-3 items-start shadow-sm">
+                  <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-600" />
+                  <div>
+                      <p className="font-bold text-red-900 mb-1">IMPORTANT: Do Not Close This Tab</p>
+                      <p>You must create your login details below to finish activating your unlimited access. If you close this page, you may need to contact support.</p>
+                  </div>
+              </div>
               <p className="text-slate-500 text-sm">
                   Create your login credentials below to <span className="text-indigo-600 font-bold">activate your unlimited access</span> immediately.
               </p>

@@ -19,7 +19,6 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
   const [activeTab, setActiveTab] = useState<Tab>('billing');
   const [isLoading, setIsLoading] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
-  const [activationLoading, setActivationLoading] = useState(false);
 
   // Settings Form State
   const [companyName, setCompanyName] = useState(user?.companyName || '');
@@ -50,17 +49,15 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
 
   const handleManageSubscription = () => {
     setIsLoading(true);
-    // In a real app, redirect to Stripe Customer Portal
-    // For now, we simulate loading
-    setTimeout(() => {
-        setIsLoading(false);
-    }, 1000);
+    // In a real app with backend, redirect to Stripe Customer Portal
+    // Currently just disabled or simulated as user manages via Stripe emails
+    alert("Please check your email for the Stripe management link or contact support.");
+    setIsLoading(false);
   };
 
   const handleActivate = () => {
-      setActivationLoading(true);
-      // Always use monthly link
-      window.location.href = STRIPE_LINKS.monthly;
+      // Open in new tab to avoid iframe blocking issues (Stripe X-Frame-Options)
+      window.open(STRIPE_LINKS.monthly, '_blank');
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -152,14 +149,9 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                 <div className="flex flex-col items-center gap-2 w-full md:w-auto">
                     <button 
                         onClick={handleActivate}
-                        disabled={activationLoading}
                         className="w-full md:w-auto px-6 py-3 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200"
                     >
-                        {activationLoading ? 'Redirecting...' : (
-                            <>
-                                Activate Pro Plan <ExternalLink size={16} />
-                            </>
-                        )}
+                        Activate Pro Plan <ExternalLink size={16} />
                     </button>
                 </div>
             </div>

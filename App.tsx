@@ -8,9 +8,9 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Check, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Lock } from 'lucide-react';
 
-// Force refresh: 2
+// Force refresh: 3
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -393,15 +393,10 @@ const App: React.FC = () => {
   };
 
   const goToCheckout = () => {
-    // Check if using placeholder links (Dev/Demo mode)
-    if (STRIPE_LINKS.monthly.includes('placeholder')) {
-        console.log("Using placeholder Stripe link. Redirecting to success page for demo.");
-        // Simulate success flow for demo purposes
-        window.location.href = window.location.pathname + '?success=true';
-        return;
-    }
-    // Redirect to Stripe immediately
-    window.location.href = STRIPE_LINKS.monthly;
+    // REAL PRODUCTION MODE: Redirect to Stripe immediately
+    // We use window.open('_blank') because some preview environments (iframes) block Stripe.
+    // This works for both preview and production customers.
+    window.open(STRIPE_LINKS.monthly, '_blank');
   };
 
   const handleUpgradeClick = () => {
