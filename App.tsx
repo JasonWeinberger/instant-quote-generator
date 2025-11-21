@@ -8,7 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check } from 'lucide-react';
 
 // Force refresh: 3
 const MAX_FREE_QUOTES = 3;
@@ -159,9 +159,14 @@ const App: React.FC = () => {
   const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
   // Handlers
+  const goToCheckout = () => {
+    // REAL PRODUCTION MODE: Redirect to Stripe immediately
+    window.open(STRIPE_LINKS.monthly, '_blank');
+  };
+
   const handleGenerateClick = async () => {
     if (isLimitReached) {
-        setShowPaywallModal(true);
+        goToCheckout();
         return;
     }
     
@@ -392,13 +397,6 @@ const App: React.FC = () => {
       }
   };
 
-  const goToCheckout = () => {
-    // REAL PRODUCTION MODE: Redirect to Stripe immediately
-    // We use window.open('_blank') because some preview environments (iframes) block Stripe.
-    // This works for both preview and production customers.
-    window.open(STRIPE_LINKS.monthly, '_blank');
-  };
-
   const handleUpgradeClick = () => {
       // Direct to payment immediately
       goToCheckout();
@@ -603,13 +601,9 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                     
                     <button
                         onClick={handleGenerateClick}
-                        disabled={isLoading || (isLimitReached && !isLoading)} 
+                        disabled={isLoading} 
                         className={`
-                            order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl text-base font-bold text-white shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2
-                            ${isLimitReached 
-                                ? 'bg-slate-400 cursor-not-allowed shadow-none' 
-                                : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300'
-                            }
+                            order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl text-base font-bold text-white shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300
                         `}
                     >
                         {isLoading ? (
@@ -617,7 +611,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                                 <Loader2 className="animate-spin" size={20} /> Generating Estimate...
                             </>
                         ) : isLimitReached ? (
-                            <>Upgrade to Continue <Lock size={16} /></>
+                            <>Get Unlimited Access <ArrowRight size={18} /></>
                         ) : (
                             <>Generate Instant Quote <ArrowRight size={18} /></>
                         )}
@@ -710,15 +704,13 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                  <div>
                      <h2 className="text-4xl font-bold mb-6">Simple, transparent pricing.</h2>
                      <p className="text-xl text-slate-300 mb-8 leading-relaxed">
-                         Join thousands of contractors saving 10+ hours a week on paperwork. No contracts, cancel anytime.
+                         Save 10+ hours a week on paperwork. No contracts, cancel anytime.
                      </p>
                      <ul className="space-y-4 mb-10">
                          {[
                              "Unlimited Estimates",
-                             "Unlimited History Storage",
+                             "History Storage",
                              "Custom Company Branding",
-                             "Priority Support",
-                             "Export to PDF (Coming Soon)"
                          ].map((item, i) => (
                              <li key={i} className="flex items-center gap-3 text-slate-300">
                                  <div className="bg-indigo-500 rounded-full p-1">
@@ -761,11 +753,16 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
       <footer className="bg-white border-t border-slate-200 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                <div className="flex items-center gap-2">
-                    <div className="bg-slate-900 p-1.5 rounded-lg">
-                        <LayoutTemplate className="h-5 w-5 text-white" />
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-slate-900 p-1.5 rounded-lg">
+                            <LayoutTemplate className="h-5 w-5 text-white" />
+                        </div>
+                        <span className="font-bold text-lg text-slate-900">Instant Quote Generator</span>
                     </div>
-                    <span className="font-bold text-lg text-slate-900">Instant Quote Generator</span>
+                    <a href="mailto:support@instantquotegenerator.com" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
+                        Support: support@instantquotegenerator.com
+                    </a>
                 </div>
                 <div className="text-slate-500 text-sm">
                     © {new Date().getFullYear()} Instant Quote Generator. All rights reserved.
@@ -845,47 +842,44 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                           </svg>
                       </div>
                       <div className="relative z-10">
-                        <div className="w-16 h-16 bg-indigo-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-indigo-500/50">
-                            <Zap size={32} fill="white" />
+                        <div className="w-16 h-16 bg-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/30">
+                            <Zap size={32} />
                         </div>
-                        <h2 className="text-2xl font-bold mb-2">You've hit your free limit!</h2>
-                        <p className="text-indigo-200">
-                            You've generated 3 free estimates. Upgrade to Pro for unlimited access.
+                        <h3 className="text-2xl font-bold mb-2">Daily Limit Reached</h3>
+                        <p className="text-slate-300">
+                            You've used your {MAX_FREE_QUOTES} free quotes for today.
                         </p>
                       </div>
                   </div>
                   
                   <div className="p-8">
-                      <ul className="space-y-4 mb-8">
-                         {[
-                             "Unlimited AI Estimates",
-                             "Save & Edit Quote History",
-                             "Custom Company Branding",
-                             "Priority Email Support"
-                         ].map((item, i) => (
-                             <li key={i} className="flex items-center gap-3 text-slate-700 font-medium">
-                                 <div className="bg-green-100 p-1 rounded-full">
-                                     <Check size={14} className="text-green-600" />
-                                 </div>
-                                 {item}
-                             </li>
-                         ))}
-                      </ul>
+                      <div className="space-y-4 mb-8">
+                          {[
+                              "Unlimited estimates",
+                              "Save history forever",
+                              "Remove daily limits",
+                              "Priority processing"
+                          ].map((item, i) => (
+                              <div key={i} className="flex items-center gap-3 text-slate-700">
+                                  <Check size={18} className="text-indigo-600 shrink-0" />
+                                  <span className="font-medium">{item}</span>
+                              </div>
+                          ))}
+                      </div>
                       
                       <button 
                         onClick={handleUpgradeClick}
-                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-xl shadow-indigo-200 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-2 text-lg"
+                        className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1 text-lg flex items-center justify-center gap-2"
                       >
-                          Upgrade Now - Only $29/mo <ArrowRight size={20} />
+                          Get Unlimited Access <ArrowRight size={20} />
                       </button>
                       <p className="text-center text-xs text-slate-400 mt-4">
-                          Secure payment via Stripe. Cancel anytime.
+                          Just $29/month. Cancel anytime.
                       </p>
                   </div>
               </div>
           </div>
       )}
-
     </div>
   );
 };

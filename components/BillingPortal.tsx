@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../shared-types';
 import { STRIPE_LINKS } from '../constants';
-import { CreditCard, Download, Check, AlertCircle, Calendar, Shield, ArrowLeft, LogOut, MoreHorizontal, Building, Phone, MapPin, ExternalLink, Zap, Lock } from 'lucide-react';
-
-// Force refresh: 2
+import { CreditCard, Check, ArrowLeft, LogOut, Building, Phone, MapPin, ExternalLink, Zap, Lock as LockIcon, Mail } from 'lucide-react';
 
 interface BillingPortalProps {
   user: User | null;
@@ -16,10 +14,10 @@ interface BillingPortalProps {
 type Tab = 'billing' | 'settings';
 
 export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, onUpdatePassword }) => {
-  const [activeTab, setActiveTab] = useState<Tab>('billing');
-  const [isLoading, setIsLoading] = useState(false);
-  const [cancelConfirm, setCancelConfirm] = useState(false);
-
+  // Default to 'settings' if active so they see the value (Branding) immediately.
+  // Default to 'billing' if inactive so they see the Upgrade prompt.
+  const [activeTab, setActiveTab] = useState<Tab>(user?.status === 'active' ? 'settings' : 'billing');
+  
   // Settings Form State
   const [companyName, setCompanyName] = useState(user?.companyName || '');
   const [companyPhone, setCompanyPhone] = useState(user?.companyPhone || '');
@@ -38,22 +36,6 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
   // Mock Data
   const nextBillingDate = new Date();
   nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-  
-  // Dynamic recent invoice date
-  const lastInvoiceDate = new Date();
-  lastInvoiceDate.setDate(lastInvoiceDate.getDate() - 14);
-
-  const invoices = isActive ? [
-    { id: 'INV-2024-001', date: lastInvoiceDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), amount: '$29.00', status: 'Paid' },
-  ] : [];
-
-  const handleManageSubscription = () => {
-    setIsLoading(true);
-    // In a real app with backend, redirect to Stripe Customer Portal
-    // Currently just disabled or simulated as user manages via Stripe emails
-    alert("Please check your email for the Stripe management link or contact support.");
-    setIsLoading(false);
-  };
 
   const handleActivate = () => {
       // Open in new tab to avoid iframe blocking issues (Stripe X-Frame-Options)
@@ -112,7 +94,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
             >
               <ArrowLeft size={20} />
             </button>
-            <h1 className="text-xl font-bold text-slate-900">User Dashboard</h1>
+            <h1 className="text-xl font-bold text-slate-900">Account Settings</h1>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-500 hidden sm:block">{user?.email}</span>
@@ -161,16 +143,6 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
         <div className="mb-8 border-b border-slate-200">
             <nav className="flex space-x-8">
                 <button
-                    onClick={() => setActiveTab('billing')}
-                    className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                        activeTab === 'billing' 
-                        ? 'border-indigo-600 text-indigo-600' 
-                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                    }`}
-                >
-                    Billing & Subscription
-                </button>
-                <button
                     onClick={() => setActiveTab('settings')}
                     className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                         activeTab === 'settings' 
@@ -179,6 +151,16 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                     }`}
                 >
                     Business Settings
+                </button>
+                <button
+                    onClick={() => setActiveTab('billing')}
+                    className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                        activeTab === 'billing' 
+                        ? 'border-indigo-600 text-indigo-600' 
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                >
+                    Billing & Subscription
                 </button>
             </nav>
         </div>
@@ -205,7 +187,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                     </div>
                     <p className="text-slate-500 text-sm">
                         {isActive 
-                            ? "Unlimited quotes, history storage, and priority support."
+                            ? "Unlimited quotes and history storage."
                             : "Limited to 3 quotes."
                         }
                     </p>
@@ -215,181 +197,77 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                     <div className="text-xs text-slate-400">/ month</div>
                     </div>
                 </div>
-                <div className="bg-slate-50 px-6 py-4 flex justify-between items-center">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                        {isActive ? (
-                             <>
-                                <Calendar size={16} className="text-slate-400" />
-                                <span>Renews on <strong>{nextBillingDate.toLocaleDateString()}</strong></span>
-                             </>
-                        ) : (
-                             <span>Upgrade to unlock unlimited access.</span>
-                        )}
-                    </div>
-                    {isActive && (
-                        <button 
-                        onClick={handleManageSubscription}
-                        disabled={isLoading}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors flex items-center gap-1"
-                        >
-                        {isLoading ? 'Loading...' : 'Manage on Stripe'} <ExternalLink size={12} />
-                        </button>
-                    )}
-                </div>
-                </div>
-
-                {/* Payment Method */}
                 {isActive && (
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                        <CreditCard size={20} className="text-indigo-600" />
-                        Payment Method
-                    </h3>
-                    
-                    <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl mb-4 hover:border-indigo-300 transition-colors group cursor-pointer bg-slate-50/50">
-                        <div className="flex items-center gap-4">
-                        <div className="w-12 h-8 bg-slate-900 rounded flex items-center justify-center text-white font-bold text-xs">
-                            VISA
+                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-100">
+                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                            <Check size={16} className="text-green-500" />
+                            <span>Unlimited Access Active</span>
                         </div>
-                        <div>
-                            <div className="font-medium text-slate-900 flex items-center gap-2">
-                            •••• •••• •••• 4242
-                            <span className="text-xs text-slate-400 font-normal">Expires 12/25</span>
-                            </div>
-                            <div className="text-xs text-slate-500">Default payment method</div>
-                        </div>
-                        </div>
-                        <button className="text-slate-400 hover:text-indigo-600 p-2">
-                        <MoreHorizontal size={20} />
-                        </button>
-                    </div>
                     </div>
                 )}
+                </div>
 
-                {/* Invoice History */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100">
-                    <h3 className="font-bold text-slate-900">Billing History</h3>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500 font-medium">
-                        <tr>
-                        <th className="px-6 py-3">Date</th>
-                        <th className="px-6 py-3">Amount</th>
-                        <th className="px-6 py-3">Status</th>
-                        <th className="px-6 py-3 text-right">Invoice</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {invoices.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-slate-400 italic">
-                                    No invoices generated yet.
-                                </td>
-                            </tr>
-                        ) : (
-                            invoices.map((inv) => (
-                            <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 text-slate-900">{inv.date}</td>
-                                <td className="px-6 py-4 text-slate-600">{inv.amount}</td>
-                                <td className="px-6 py-4">
-                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">
-                                    <Check size={10} /> {inv.status}
-                                </span>
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                <button className="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 p-2 rounded transition-colors inline-flex items-center gap-1">
-                                    <Download size={14} /> <span className="hidden sm:inline">PDF</span>
-                                </button>
-                                </td>
-                            </tr>
-                            ))
-                        )}
-                    </tbody>
-                    </table>
-                </div>
-                </div>
+                {/* Payment Method & Invoices Info */}
+                {isActive && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                            <CreditCard size={20} className="text-indigo-600" />
+                            Billing Management
+                        </h3>
+                        
+                        <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 border border-slate-200">
+                            <div className="flex items-start gap-3">
+                                <div className="bg-white p-2 rounded-lg border border-slate-200 text-slate-400">
+                                    <Mail size={20} />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-slate-900 mb-1">Manage via Stripe Email</p>
+                                    <p className="mb-3 leading-relaxed">
+                                        For security, invoices, payment method updates, and cancellations are handled directly through Stripe's secure email system.
+                                    </p>
+                                    <p>
+                                        Please check your email inbox for your <strong>Subscription Confirmation</strong> or latest <strong>Invoice Receipt</strong> to access your customer portal link.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Right Column - Usage & Support */}
+            {/* Right Column - Support */}
             <div className="space-y-8">
                 
-                {/* Usage Stats */}
+                {/* Plan Status */}
                 <div className="bg-slate-900 rounded-2xl shadow-lg p-6 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-indigo-500 rounded-full blur-2xl opacity-20"></div>
-                
-                <h3 className="font-bold text-lg mb-1">Plan Usage</h3>
-                <p className="text-slate-400 text-sm mb-6">Your current billing period stats.</p>
-                
-                <div className="space-y-4">
-                    <div>
-                    <div className="flex justify-between text-sm mb-2">
-                        <span className="text-slate-300">Quotes Generated</span>
-                        <span className="font-bold">{isActive ? 'Unlimited' : 'Limited (3 max)'}</span>
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-indigo-500 rounded-full blur-2xl opacity-20"></div>
+                    
+                    <h3 className="font-bold text-lg mb-4">Account Status</h3>
+                    
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-300">Plan Type</span>
+                            <span className="font-bold">{isActive ? 'Unlimited Pro' : 'Free Tier'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-300">Estimates</span>
+                            <span className="font-bold text-green-400">{isActive ? 'Unlimited' : '3 / day'}</span>
+                        </div>
+                         <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-300">History Storage</span>
+                            <span className="font-bold text-green-400">{isActive ? 'Active' : 'Limited'}</span>
+                        </div>
                     </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div className={`h-2 rounded-full w-full ${isActive ? 'bg-indigo-500' : 'bg-slate-500'}`}></div>
-                    </div>
-                    </div>
-                    <div>
-                    <div className="flex justify-between text-sm mb-2">
-                        <span className="text-slate-300">Storage Used</span>
-                        <span className="font-bold">12%</span>
-                    </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                        <div className="bg-green-500 h-2 rounded-full w-[12%]"></div>
-                    </div>
-                    </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-800 flex items-center gap-2 text-xs text-slate-400">
-                    <Shield size={12} />
-                    <span>Enterprise-grade security enabled</span>
-                </div>
                 </div>
 
                 {/* Support Contact */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                     <h3 className="font-bold text-slate-900 mb-2">Support</h3>
                     <p className="text-sm text-slate-600 mb-4">
-                        Support or billing questions?<br/>
+                        Need help with your account or billing?<br/>
                         Email us at <a href="mailto:support@instantquotegenerator.com" className="text-indigo-600 font-bold hover:underline">support@instantquotegenerator.com</a><br/>
                         and we’ll respond within 24 hours.
                     </p>
-                </div>
-
-                {/* Danger Zone */}
-                <div className="border border-red-100 bg-red-50 rounded-2xl p-6">
-                <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
-                    <AlertCircle size={18} /> Cancel Subscription
-                </h3>
-                <p className="text-red-700 text-sm mb-4">
-                    Once you cancel, you will lose access to unlimited quotes at the end of your billing period.
-                </p>
-                
-                {!cancelConfirm ? (
-                    <button 
-                    onClick={() => setCancelConfirm(true)}
-                    className="w-full py-2 px-4 bg-white border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-50 hover:border-red-300 transition-all"
-                    >
-                    Cancel Plan
-                    </button>
-                ) : (
-                    <div className="space-y-2">
-                    <button 
-                        className="w-full py-2 px-4 bg-red-600 text-white rounded-lg text-sm font-bold hover:bg-red-700 transition-all"
-                    >
-                        Confirm Cancellation
-                    </button>
-                    <button 
-                        onClick={() => setCancelConfirm(false)}
-                        className="w-full py-2 px-4 text-slate-500 text-sm hover:text-slate-700"
-                    >
-                        Keep my plan
-                    </button>
-                    </div>
-                )}
                 </div>
 
             </div>
@@ -496,7 +374,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                                 </label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock size={18} className="text-slate-400" />
+                                        <LockIcon size={18} className="text-slate-400" />
                                     </div>
                                     <input
                                         type="password"
@@ -513,7 +391,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                                 </label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock size={18} className="text-slate-400" />
+                                        <LockIcon size={18} className="text-slate-400" />
                                     </div>
                                     <input
                                         type="password"

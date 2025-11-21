@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
+import { Shield, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
   onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;
@@ -259,10 +259,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
             <h3 className="text-3xl font-bold text-white mb-6">Professional estimates in seconds, not hours.</h3>
             <ul className="space-y-4 text-slate-300">
                 {[
-                    "Unlimited PDF Downloads",
                     "Cloud History Sync",
                     "Custom Logo & Branding",
-                    "Client Email Integration"
                 ].map((item, i) => (
                     <li key={i} className="flex items-center gap-3">
                         <div className="bg-indigo-500/20 p-1 rounded-full">
@@ -274,24 +272,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
             </ul>
         </div>
 
-        <div className="relative z-10 mt-12">
-            <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 p-6 rounded-2xl">
-                <div className="flex items-center gap-1 mb-3 text-yellow-400">
-                    {[1,2,3,4,5].map(i => <Star key={i} size={16} fill="currentColor" />)}
-                </div>
-                <p className="text-slate-300 italic mb-4 text-lg">
-                    "I used to spend my Sunday nights typing up quotes in Word. Now I do it in the truck between jobs. This thing pays for itself in one day."
-                </p>
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">MR</div>
-                    <div>
-                        <div className="text-white font-bold">Mike Reynolds</div>
-                        <div className="text-slate-400 text-xs">Owner, Reynolds Roofing</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="flex items-center gap-2 mt-8 text-slate-500 text-xs">
+        <div className="relative z-10 mt-auto">
+            <div className="flex items-center gap-2 text-slate-500 text-xs">
                 <Shield size={12} />
                 <span>256-bit SSL Encrypted • GDPR Compliant</span>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { QuoteResult, CostBreakdown, User } from '../shared-types';
-import { Check, Copy, Download, FileText, Pencil, Calculator, Building, Phone } from 'lucide-react';
+import { Check, Copy, FileText, Pencil, Calculator, Building, Phone, Download, Loader2 } from 'lucide-react';
 
 interface QuoteResultCardProps {
   result: QuoteResult;
@@ -9,6 +9,7 @@ interface QuoteResultCardProps {
 
 export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }) => {
   const [copied, setCopied] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [breakdown, setBreakdown] = useState<CostBreakdown>(result.breakdown);
 
   // Sync local state if prop changes (e.g. loading history)
@@ -20,6 +21,47 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
     navigator.clipboard.writeText(result.customerQuote);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadPDF = () => {
+    setIsDownloading(true);
+    const element = document.getElementById('quote-card-content');
+    
+    // Formatting filename
+    const companyPrefix = user?.companyName ? user.companyName.replace(/[^a-z0-9]/gi, '_') : 'Quote';
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `${companyPrefix}_Estimate_${dateStr}.pdf`;
+
+    const opt = {
+      margin: 0.5,
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { 
+        scale: 2, // Higher scale for better resolution
+        useCORS: true,
+        logging: false,
+        ignoreElements: (element: Element) => {
+            // Ignore buttons that shouldn't be in the PDF
+            return element.classList.contains('no-print');
+        }
+      },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+
+    // Access global html2pdf loaded via script tag in index.html
+    // @ts-ignore
+    if (window.html2pdf) {
+        // @ts-ignore
+        window.html2pdf().set(opt).from(element).save().then(() => {
+            setIsDownloading(false);
+        }).catch((err: any) => {
+            console.error("PDF Generation failed", err);
+            setIsDownloading(false);
+        });
+    } else {
+        console.error("html2pdf library not loaded");
+        setIsDownloading(false);
+    }
   };
 
   const handleBreakdownChange = (key: keyof CostBreakdown, value: string) => {
@@ -45,16 +87,21 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
 
   return (
     <div className="animate-fade-in-up">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden">
+      <div id="quote-card-content" className="bg-white rounded-lg border border-slate-200 shadow-xl overflow-hidden">
         {/* Toolbar */}
         <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex justify-between items-center">
             <div className="flex items-center gap-2 text-slate-600 font-semibold text-sm">
                 {hasBranding ? <Building size={16} className="text-indigo-600" /> : <FileText size={16} className="text-indigo-600" />}
                 {companyName}
             </div>
-            <div className="flex gap-2">
-                <button className="text-xs flex items-center gap-1 text-slate-600 hover:text-indigo-600 px-3 py-1.5 rounded-md hover:bg-white border border-transparent hover:border-slate-200 transition-all">
-                    <Download size={14} /> Save PDF
+            <div className="flex gap-2 no-print">
+                <button 
+                    onClick={handleDownloadPDF}
+                    disabled={isDownloading}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                    {isDownloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    {isDownloading ? 'Saving...' : 'Download PDF'}
                 </button>
             </div>
         </div>
@@ -65,7 +112,7 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
                 <div>
                     <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                         {formatMoney(totalCost)}
-                        <span className="text-xs font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">Editable</span>
+                        <span className="no-print text-xs font-normal text-slate-400 bg-slate-100 px-2 py-1 rounded-full border border-slate-200">Editable</span>
                     </h2>
                     <p className="text-slate-500 text-sm mt-1">Estimated Total Project Cost</p>
                     {companyPhone && (
@@ -88,8 +135,8 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
             {/* Editable Cost Grid */}
             <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Itemized Breakdown (Click to Edit)</h4>
-                  <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Itemized Breakdown</h4>
+                  <div className="no-print flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
                     <Calculator size={12} /> Auto-calculating
                   </div>
                 </div>
@@ -101,7 +148,7 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
                               <label htmlFor={`input-${key}`} className="text-xs text-slate-500 capitalize cursor-pointer block w-full">
                                 {key === 'misc' ? 'Overhead/Misc' : key}
                               </label>
-                              <Pencil size={10} className="text-slate-300 opacity-0 group-hover:opacity-100" />
+                              <Pencil size={10} className="no-print text-slate-300 opacity-0 group-hover:opacity-100" />
                             </div>
                             <div className="flex items-center text-slate-900 font-semibold">
                               <span className="text-slate-400 mr-1">$</span>
@@ -120,7 +167,7 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
 
             {/* Message Content */}
             <div className="bg-indigo-50/50 rounded-xl border border-indigo-100 p-6 relative group">
-                <div className="absolute top-4 right-4">
+                <div className="absolute top-4 right-4 no-print">
                     <button
                         onClick={handleCopy}
                         className={`
@@ -138,7 +185,7 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
                 <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed font-medium">
                     {result.customerQuote}
                 </p>
-                <div className="mt-4 pt-4 border-t border-indigo-100 text-xs text-indigo-400 italic">
+                <div className="mt-4 pt-4 border-t border-indigo-100 text-xs text-indigo-400 italic no-print">
                   Note: This text was generated based on the initial AI range. It does not automatically update with your manual edits above.
                 </div>
             </div>
