@@ -8,7 +8,7 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, Check, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Lock } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Settings, Check, Lock } from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
 
@@ -210,7 +210,7 @@ const App: React.FC = () => {
       
       // Real DB Insert
       if (user && isSupabaseConfigured() && supabase) {
-          // Using response object instead of destructuring to avoid TS unused variable error
+          // Capture entire response object to avoid unused variable check on destructured 'error'
           const response = await supabase.from('quotes').insert({
               user_id: user.id,
               industry: industry,
@@ -219,7 +219,9 @@ const App: React.FC = () => {
               result: quoteData
           });
           
-          if (response.error) console.warn("Failed to save quote to database:", response.error);
+          if (response.error) {
+            console.warn("Failed to save quote to database:", response.error);
+          }
       }
 
       setResult(quoteData);
