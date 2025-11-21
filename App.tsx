@@ -208,10 +208,10 @@ const App: React.FC = () => {
       setHistory(updatedHistory);
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
-      // Real DB Insert
+      // Real DB Insert - REFACTORED FOR TYPESCRIPT SAFETY
       if (user && isSupabaseConfigured() && supabase) {
-          // Use specific variable name 'insertOp' to prevent any variable shadowing issues in build
-          const insertOp = await supabase.from('quotes').insert({
+          // Explicitly destructure and rename error to ensure usage
+          const { error: dbError } = await supabase.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -219,8 +219,9 @@ const App: React.FC = () => {
               result: quoteData
           });
           
-          if (insertOp.error) {
-            console.warn("Failed to save quote to database:", insertOp.error);
+          if (dbError) {
+            // Explicitly use the error variable
+            console.warn("Failed to save quote to database:", dbError.message);
           }
       }
 
