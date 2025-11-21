@@ -76,10 +76,6 @@ const App: React.FC = () => {
                  if (!user || user.id !== session.user.id) {
                     await fetchUserProfile(session.user.id, session.user.email || '');
                  }
-                 // Check if this was a signup flow upgrade
-                 if (localStorage.getItem('pendingUpgrade') === 'true') {
-                    setShowPaywallModal(true);
-                 }
             } else if (event === 'PASSWORD_RECOVERY') {
                  // When user clicks reset link, they are signed in. Redirect to settings to change password.
                  setCurrentView('billing'); 
@@ -114,13 +110,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Auto-trigger Paywall if pending upgrade flag is set and user logs in
-  useEffect(() => {
-    if (user && localStorage.getItem('pendingUpgrade') === 'true') {
-        setShowPaywallModal(true);
-    }
-  }, [user]);
-
   const fetchUserProfile = async (userId: string, email: string) => {
       if (!supabase) return;
 
@@ -146,7 +135,6 @@ const App: React.FC = () => {
               setUser(u);
           } else {
               // If no profile exists (new signup without trigger), create a default local state
-              // This ensures the app works even if the DB row isn't ready yet.
               const newUser: User = {
                   id: userId,
                   email: email,
@@ -155,8 +143,6 @@ const App: React.FC = () => {
                   trialStartDate: Date.now()
               };
               setUser(newUser);
-              // Optionally try to insert it now? For now, we rely on it being created or just working in memory.
-              console.warn("User profile not found in DB, using default state.");
           }
       } catch (err) {
           console.error("Unexpected error fetching profile:", err);
@@ -247,8 +233,6 @@ const App: React.FC = () => {
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
           if (isSignUp) {
-              // We let Supabase handle the redirect URL based on the Dashboard "Site URL"
-              // to avoid localhost errors on production.
               const { data, error } = await supabase.auth.signUp({ 
                 email, 
                 password
@@ -311,31 +295,48 @@ const App: React.FC = () => {
       if (isSupabaseConfigured() && supabase) {
           let userId = user?.id;
 
-          // 1. If not logged in, try to login first
+          // 1. If not logged in, try to Authenticate (Sign Up or Sign In)
           if (!userId && email && password) {
-              const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-              if (signInError) throw new Error("Could not sign in. Please check credentials.");
-              userId = signInData.user.id;
+              // Attempt Sign Up first (Assumption: New user coming from Stripe)
+              const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
+                email, 
+                password 
+              });
+
+              if (signUpData.user && signUpData.session) {
+                  // Success: New user created and logged in
+                  userId = signUpData.user.id;
+              } else if (signUpData.user && !signUpData.session) {
+                  // User created but needs confirmation
+                  throw new Error("Account created! Please check your email to confirm, then log in.");
+              } else if (signUpError) {
+                  // If error indicates user exists, try logging in
+                  if (signUpError.message.toLowerCase().includes('already registered') || signUpError.status === 422 || signUpError.status === 400) {
+                       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+                       if (signInError) throw new Error("Account already exists, but password was incorrect.");
+                       if (signInData.user) userId = signInData.user.id;
+                  } else {
+                      throw signUpError;
+                  }
+              }
           }
 
-          if (!userId) throw new Error("No authenticated user found to activate.");
+          if (!userId) throw new Error("Authentication failed. Please try again.");
 
-          // 2. Update User Status to Active
+          // 2. Update User Status to Active in DB
           const { error: updateError } = await supabase
             .from('users')
             .upsert({ 
                 id: userId, 
-                status: 'active' // Unlock account
+                status: 'active',
+                email: email || user?.email
             });
              
           if (updateError) throw updateError;
 
-          // 3. Refresh Profile
-          if (email) { 
-             await fetchUserProfile(userId, email);
-          } else if (user?.email) {
-             await fetchUserProfile(userId, user.email);
-          }
+          // 3. Refresh Profile state
+          await fetchUserProfile(userId, email || user?.email || '');
+          
       } else {
           // DEMO MODE MOCK
           if (user) {
@@ -343,7 +344,6 @@ const App: React.FC = () => {
             setUser(updatedUser);
             localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
           } else if (email) {
-              // Fallback for demo mode if somehow lost session
                const newUser: User = {
                   id: `local_paid_${Date.now()}`,
                   email,
@@ -392,17 +392,13 @@ const App: React.FC = () => {
   };
 
   const handleStripeRedirect = () => {
-    localStorage.removeItem('pendingUpgrade'); // Clear the upgrade flag before leaving
+    // Redirect to Stripe immediately
     window.location.href = STRIPE_LINKS.monthly;
   };
 
   const handleUpgradeClick = () => {
-      if (user) {
-          handleStripeRedirect();
-      } else {
-          localStorage.setItem('pendingUpgrade', 'true');
-          setCurrentView('login');
-      }
+      // Direct to payment immediately
+      handleStripeRedirect();
   };
 
   // View Router
@@ -762,25 +758,14 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 </div>
 
                 <button 
-                    onClick={() => {
-                        if (user) {
-                            handleStripeRedirect();
-                        } else {
-                            localStorage.setItem('pendingUpgrade', 'true');
-                            setCurrentView('login');
-                        }
-                    }}
+                    onClick={handleStripeRedirect}
                     className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200"
                 >
-                    {user ? (
-                        <>Proceed to Payment <ArrowRight size={18} /></>
-                    ) : (
-                        <>Sign Up to Upgrade <ArrowRight size={18} /></>
-                    )}
+                    Proceed to Payment <ArrowRight size={18} />
                 </button>
                 
                 <p className="text-center text-xs text-slate-400 mt-4">
-                    {user ? 'Secure payment via Stripe.' : 'You must create an account before upgrading.'}
+                    Secure payment via Stripe. You'll create your account after payment.
                 </p>
             </div>
         </div>

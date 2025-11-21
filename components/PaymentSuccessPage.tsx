@@ -82,9 +82,9 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
 
         <div className="p-8">
           <div className="mb-6 text-center">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Activate Your Subscription</h3>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Create Account to Activate</h3>
               <p className="text-slate-500 text-sm">
-                  Please sign in to verify your account and <span className="text-indigo-600 font-bold">instantly unlock unlimited quotes</span>.
+                  Create your login (or sign in) to verify your account and <span className="text-indigo-600 font-bold">instantly unlock unlimited quotes</span>.
               </p>
           </div>
 
@@ -102,7 +102,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Password</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Choose Password</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock size={18} className="text-slate-400" />
@@ -129,7 +129,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
               disabled={isLoading}
               className="w-full flex items-center justify-center gap-2 py-4 px-4 border border-transparent rounded-xl shadow-lg shadow-indigo-200 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 transform hover:-translate-y-0.5"
             >
-              {isLoading ? 'Activating...' : 'Sign In & Activate'} <ArrowRight size={16} />
+              {isLoading ? 'Activating...' : 'Create Account & Unlock'} <ArrowRight size={16} />
             </button>
             
             <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-4">
