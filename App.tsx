@@ -446,7 +446,7 @@ const App: React.FC = () => {
               <div className="bg-indigo-600 p-1.5 rounded-lg mr-2">
                 <LayoutTemplate className="h-5 w-5 text-white" />
               </div>
-              <span className="font-bold text-xl tracking-tight text-slate-900">Instant Quote <span className="text-indigo-600">Generator</span></span>
+              <span className="font-bold text-xl tracking-tight text-slate-900">Instant <span className="text-indigo-600">Quote Generator</span></span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
@@ -695,7 +695,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
       <div ref={pricingRef} className="py-24 bg-slate-900 text-white relative overflow-hidden">
          <div className="absolute inset-0 opacity-20">
              <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-               <path d="M0 100 C 20 0 50 0 100 100 Z" fill="indigo" />
+               <path d="M0 100 C 20 0 50 0 100 100 Z" fill="#0052CC" />
              </svg>
          </div>
          
@@ -742,7 +742,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                          Get Unlimited Access <ArrowRight size={20} />
                      </button>
                      <p className="text-center text-xs text-slate-400 mt-4">
-                         30-day money-back guarantee. Secure payment via Stripe.
+                         Secure payment via Stripe.
                      </p>
                  </div>
              </div>
