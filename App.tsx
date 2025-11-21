@@ -210,8 +210,8 @@ const App: React.FC = () => {
       
       // Real DB Insert
       if (user && isSupabaseConfigured() && supabase) {
-          // Capture entire response object to avoid unused variable check on destructured 'error'
-          const response = await supabase.from('quotes').insert({
+          // Use specific variable name 'insertOp' to prevent any variable shadowing issues in build
+          const insertOp = await supabase.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -219,8 +219,8 @@ const App: React.FC = () => {
               result: quoteData
           });
           
-          if (response.error) {
-            console.warn("Failed to save quote to database:", response.error);
+          if (insertOp.error) {
+            console.warn("Failed to save quote to database:", insertOp.error);
           }
       }
 

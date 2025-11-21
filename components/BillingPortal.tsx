@@ -5,7 +5,7 @@ import {
   CreditCard, 
   Download, 
   Check, 
-  AlertCircle, 
+  AlertCircle,
   Calendar, 
   Shield, 
   ArrowLeft, 
