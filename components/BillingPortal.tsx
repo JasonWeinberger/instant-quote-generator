@@ -5,7 +5,7 @@ import {
   CreditCard, 
   Download, 
   Check, 
-  AlertTriangle, 
+  AlertCircle, 
   Calendar, 
   Shield, 
   ArrowLeft, 
@@ -407,7 +407,7 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                 {/* Danger Zone */}
                 <div className="border border-red-100 bg-red-50 rounded-2xl p-6">
                 <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
-                    <AlertTriangle size={18} /> Cancel Subscription
+                    <AlertCircle size={18} /> Cancel Subscription
                 </h3>
                 <p className="text-red-700 text-sm mb-4">
                     Once you cancel, you will lose access to unlimited quotes at the end of your billing period.

@@ -115,7 +115,6 @@ const App: React.FC = () => {
 
       try {
           // Fetch profile from 'users' table
-          // Ensure no unused variables here
           const { data } = await supabase
             .from('users')
             .select('*')
