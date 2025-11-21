@@ -16,7 +16,6 @@ import {
   MapPin,
   ExternalLink,
   Zap,
-  Mail,
   Lock
 } from 'lucide-react';
 

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check } from 'lucide-react';
+import { Shield, Star, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, ExternalLink, Zap, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
   onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;
   onResetPassword: (email: string) => Promise<void>;
   onBack: () => void;
+  onUpgrade: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, onBack }) => {
-  // Modes: 'signup' (default per previous behavior), 'signin', 'forgot'
-  const [authMode, setAuthMode] = useState<'signup' | 'signin' | 'forgot'>('signup');
+export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, onBack, onUpgrade }) => {
+  // Modes: 'signup', 'signin', 'forgot'
+  const [authMode, setAuthMode] = useState<'signup' | 'signin' | 'forgot'>('signin'); 
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +19,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
-  const isSignUp = authMode === 'signup';
+  // We no longer use isSignUp for auth submission here, as signup happens post-payment
+  const isSignUp = false; 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +41,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         return;
     }
 
-    // Handle Sign In / Sign Up
+    // Handle Sign In
+    // Note: Signup form is removed, so we only handle Sign In here
     if (password.length < 6) {
         setError("Password must be at least 6 characters.");
         setIsLoading(false);
@@ -128,123 +131,137 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         </button>
 
         <div className="mx-auto w-full max-w-sm lg:w-96">
-          <div className="text-center mb-10">
+          <div className="text-center mb-8">
             <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-              {authMode === 'signup' ? 'Create your account' : 
+              {authMode === 'signup' ? 'Join Instant Quote' : 
                authMode === 'signin' ? 'Welcome back' : 
                'Reset Password'}
             </h2>
             <p className="mt-2 text-sm text-slate-500">
-              {authMode === 'signup' ? 'Start generating professional quotes today.' : 
+              {authMode === 'signup' ? 'Get unlimited access to continue.' : 
                authMode === 'signin' ? 'Access your history and settings.' :
                'Enter your email to receive a reset link.'}
             </p>
           </div>
 
-          {/* Social Login - Only show for Auth modes */}
-          {authMode !== 'forgot' && (
-            <div className="space-y-3">
-                <button type="button" className="w-full flex items-center justify-center gap-3 bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 font-medium py-2.5 px-4 rounded-xl transition-all relative group">
-                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                <span>Continue with Google</span>
-                </button>
-            </div>
-          )}
-
-          {authMode !== 'forgot' && (
-            <div className="mt-8 relative">
-                <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-slate-400 uppercase tracking-wider font-medium text-xs">Or continue with email</span>
-                </div>
-            </div>
-          )}
-
-          {/* Main Form */}
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-5">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email address</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail size={18} className="text-slate-400" />
-                  </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                    placeholder="you@company.com"
-                  />
-                </div>
-              </div>
-
-              {authMode !== 'forgot' && (
-                <div>
-                    <div className="flex items-center justify-between mb-1">
-                        <label htmlFor="password" className="block text-sm font-medium text-slate-700">Password</label>
-                        {authMode === 'signin' && (
-                            <button 
-                                type="button"
-                                onClick={() => { setAuthMode('forgot'); setError(null); }}
-                                className="text-xs font-medium text-indigo-600 hover:text-indigo-500"
-                            >
-                                Forgot password?
-                            </button>
-                        )}
+          {/* SPECIAL SIGN UP VIEW: Pro Option Only */}
+          {authMode === 'signup' && (
+             <div className="mb-8 animate-fade-in-up">
+                <div className="bg-slate-900 rounded-xl p-6 text-white relative overflow-hidden shadow-lg shadow-indigo-200 transform hover:-translate-y-1 transition-transform cursor-pointer group" onClick={onUpgrade}>
+                    <div className="absolute top-0 right-0 w-20 h-20 bg-indigo-500 rounded-bl-full -mr-10 -mt-10 opacity-50 group-hover:scale-110 transition-transform"></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2 text-indigo-300 font-bold text-sm uppercase tracking-wide">
+                                <Zap size={16} fill="currentColor" /> Recommended
+                            </div>
+                        </div>
+                        <h3 className="text-2xl font-bold mb-1">Unlimited Access</h3>
+                        <p className="text-slate-400 text-sm mb-4">Remove limits & unlock pro features.</p>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                            Get Unlimited ($29/mo) <ArrowRight size={16} />
+                        </button>
                     </div>
+                </div>
+                
+                <div className="mt-8 text-center px-4">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 mb-3">
+                         <Shield size={24} />
+                    </div>
+                    <h4 className="text-slate-900 font-bold mb-1">Account Creation</h4>
+                    <p className="text-slate-500 text-sm">
+                        Your account credentials will be created <strong>after payment</strong> is successfully processed.
+                    </p>
+                </div>
+             </div>
+          )}
+
+          {/* Main Form - Hidden when in 'signup' mode since that is now just a redirect page */}
+          {authMode !== 'signup' && (
+              <form className="space-y-6 animate-fade-in-up" onSubmit={handleSubmit}>
+                <div className="space-y-5">
+                <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">Email address</label>
                     <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock size={18} className="text-slate-400" />
+                        <Mail size={18} className="text-slate-400" />
                     </div>
                     <input
-                        id="password"
-                        name="password"
-                        type={showPassword ? 'text' : 'password'}
-                        autoComplete="current-password"
+                        id="email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
                         required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="block w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                        placeholder="••••••••"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        placeholder="you@company.com"
                     />
-                    <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
-                    >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
                     </div>
                 </div>
-              )}
-            </div>
 
-            {error && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
-                    <AlertCircle size={16} /> {error}
-                </div>
-            )}
-
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Processing...' : (
-                    authMode === 'signup' ? 'Create Account' : 
-                    authMode === 'signin' ? 'Sign In' : 'Send Reset Link'
+                {authMode !== 'forgot' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-1">
+                            <label htmlFor="password" className="block text-sm font-medium text-slate-700">Password</label>
+                            {authMode === 'signin' && (
+                                <button 
+                                    type="button"
+                                    onClick={() => { setAuthMode('forgot'); setError(null); }}
+                                    className="text-xs font-medium text-indigo-600 hover:text-indigo-500"
+                                >
+                                    Forgot password?
+                                </button>
+                            )}
+                        </div>
+                        <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Lock size={18} className="text-slate-400" />
+                        </div>
+                        <input
+                            id="password"
+                            name="password"
+                            type={showPassword ? 'text' : 'password'}
+                            autoComplete="current-password"
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="block w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                            placeholder="••••••••"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                        </div>
+                    </div>
                 )}
-              </button>
-            </div>
-          </form>
+                </div>
+
+                {error && (
+                    <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                        <AlertCircle size={16} /> {error}
+                    </div>
+                )}
+
+                <div>
+                <button
+                    type="submit"
+                    disabled={isLoading}
+                    className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed bg-slate-900 hover:bg-slate-800`}
+                >
+                    {isLoading ? 'Processing...' : (
+                        authMode === 'signin' ? 'Log In' : 'Send Reset Link'
+                    )}
+                </button>
+                </div>
+            </form>
+          )}
 
           <div className="mt-6 text-center">
             {authMode === 'forgot' ? (
@@ -252,7 +269,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
                     onClick={() => { setAuthMode('signin'); setError(null); }}
                     className="text-sm font-bold text-indigo-600 hover:text-indigo-500 transition-colors"
                 >
-                    Back to Sign In
+                    Back to Log In
                 </button>
             ) : (
                 <p className="text-sm text-slate-500">
@@ -264,7 +281,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
                     }} 
                     className="font-bold text-indigo-600 hover:text-indigo-500 transition-colors"
                 >
-                    {authMode === 'signup' ? 'Sign in' : 'Sign up for free'}
+                    {authMode === 'signup' ? 'Log in' : 'Get Unlimited Access'}
                 </button>
                 </p>
             )}

@@ -391,14 +391,14 @@ const App: React.FC = () => {
       }
   };
 
-  const handleStripeRedirect = () => {
+  const goToCheckout = () => {
     // Redirect to Stripe immediately
     window.location.href = STRIPE_LINKS.monthly;
   };
 
   const handleUpgradeClick = () => {
       // Direct to payment immediately
-      handleStripeRedirect();
+      goToCheckout();
   };
 
   // View Router
@@ -412,6 +412,7 @@ const App: React.FC = () => {
             onAuth={handleAuth} 
             onResetPassword={handleResetPassword}
             onBack={() => setCurrentView('landing')} 
+            onUpgrade={() => goToCheckout()}
         />
       );
   }
@@ -449,14 +450,14 @@ const App: React.FC = () => {
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
-              <button onClick={() => scrollToSection(featuresRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">How it works</button>
-              <button onClick={() => scrollToSection(pricingRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Pricing</button>
-              <button onClick={() => setShowHistoryModal(true)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1">
+              <button type="button" onClick={() => scrollToSection(featuresRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">How it works</button>
+              <button type="button" onClick={() => scrollToSection(pricingRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Pricing</button>
+              <button type="button" onClick={() => setShowHistoryModal(true)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1">
                 <History size={16} /> History
               </button>
               
               {user ? (
-                   <button onClick={() => setCurrentView('billing')} className="flex items-center gap-2 pl-4 border-l border-slate-200 hover:opacity-80 transition-opacity">
+                   <button type="button" onClick={() => setCurrentView('billing')} className="flex items-center gap-2 pl-4 border-l border-slate-200 hover:opacity-80 transition-opacity">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-transparent hover:ring-indigo-200 transition-all ${user.status === 'active' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
                             {user.email.substring(0,2).toUpperCase()}
                         </div>
@@ -469,18 +470,18 @@ const App: React.FC = () => {
                    </button>
               ) : (
                 <>
-                    <button onClick={() => setCurrentView('login')} className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors">
-                        Sign In
+                    <button type="button" onClick={() => setCurrentView('login')} className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors">
+                        Log In
                     </button>
-                    <button onClick={handleUpgradeClick} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
-                        Get Unlimited
+                    <button type="button" onClick={handleUpgradeClick} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
+                        Get Unlimited Access
                     </button>
                 </>
               )}
             </div>
 
             <div className="md:hidden">
-              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-slate-600">
+              <button type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-slate-600">
                 {mobileMenuOpen ? <X /> : <Menu />}
               </button>
             </div>
@@ -490,23 +491,23 @@ const App: React.FC = () => {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-4 shadow-lg">
-             <button onClick={() => scrollToSection(featuresRef)} className="block w-full text-left text-sm font-medium text-slate-600">How it works</button>
-             <button onClick={() => scrollToSection(pricingRef)} className="block w-full text-left text-sm font-medium text-slate-600">Pricing</button>
-             <button onClick={() => setShowHistoryModal(true)} className="block w-full text-left text-sm font-medium text-slate-600 flex items-center gap-2">
+             <button type="button" onClick={() => scrollToSection(featuresRef)} className="block w-full text-left text-sm font-medium text-slate-600">How it works</button>
+             <button type="button" onClick={() => scrollToSection(pricingRef)} className="block w-full text-left text-sm font-medium text-slate-600">Pricing</button>
+             <button type="button" onClick={() => setShowHistoryModal(true)} className="block w-full text-left text-sm font-medium text-slate-600 flex items-center gap-2">
                  <History size={16} /> History
              </button>
              <div className="pt-4 border-t border-slate-100">
                  {user ? (
-                     <button onClick={() => setCurrentView('billing')} className="w-full text-left text-sm font-bold text-indigo-600">
+                     <button type="button" onClick={() => setCurrentView('billing')} className="w-full text-left text-sm font-bold text-indigo-600">
                          Manage Account
                      </button>
                  ) : (
                     <div className="space-y-2">
-                        <button onClick={() => setCurrentView('login')} className="block w-full text-center py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg">
-                            Sign In
+                        <button type="button" onClick={() => setCurrentView('login')} className="block w-full text-center py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg">
+                            Log In
                         </button>
-                        <button onClick={handleUpgradeClick} className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg">
-                            Get Unlimited
+                        <button type="button" onClick={handleUpgradeClick} className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg">
+                            Get Unlimited Access
                         </button>
                     </div>
                  )}
@@ -718,7 +719,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                           </li>
                       </ul>
 
-                      <button onClick={handleUpgradeClick} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
+                      <button onClick={goToCheckout} className="mt-8 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-indigo-900/50">
                           Get Unlimited Access
                       </button>
                   </div>
@@ -758,7 +759,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 </div>
 
                 <button 
-                    onClick={handleStripeRedirect}
+                    onClick={goToCheckout}
                     className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-xl shadow-indigo-200"
                 >
                     Proceed to Payment <ArrowRight size={18} />

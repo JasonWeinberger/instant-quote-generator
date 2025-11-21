@@ -73,18 +73,18 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <div className="w-16 h-16 bg-white text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
                     <Check size={32} strokeWidth={3} />
                  </div>
-                 <h2 className="text-2xl font-bold text-white">Order Confirmed!</h2>
+                 <h2 className="text-2xl font-bold text-white">Payment Received!</h2>
                  <p className="text-green-100 mt-2 text-sm font-medium">
-                    Your payment was received successfully.
+                    Your transaction was successful.
                  </p>
              </div>
         </div>
 
         <div className="p-8">
           <div className="mb-6 text-center">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Create Account to Activate</h3>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Set Up Your Pro Account</h3>
               <p className="text-slate-500 text-sm">
-                  Create your login (or sign in) to verify your account and <span className="text-indigo-600 font-bold">instantly unlock unlimited quotes</span>.
+                  Create your login credentials below to <span className="text-indigo-600 font-bold">activate your unlimited access</span> immediately.
               </p>
           </div>
 
