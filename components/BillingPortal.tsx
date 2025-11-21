@@ -3,7 +3,7 @@ import { User } from '../shared-types';
 import { STRIPE_LINKS } from '../constants';
 import { CreditCard, Download, Check, AlertCircle, Calendar, Shield, ArrowLeft, LogOut, MoreHorizontal, Building, Phone, MapPin, ExternalLink, Zap, Lock } from 'lucide-react';
 
-// Force refresh: 1
+// Force refresh: 2
 
 interface BillingPortalProps {
   user: User | null;
@@ -11,19 +11,15 @@ interface BillingPortalProps {
   onLogout: () => void;
   onUpdateUser: (user: User) => void;
   onUpdatePassword: (password: string) => Promise<void>;
-  initialBillingCycle?: 'monthly' | 'yearly';
 }
 
 type Tab = 'billing' | 'settings';
 
-export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, onUpdatePassword, initialBillingCycle = 'monthly' }) => {
+export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLogout, onUpdateUser, onUpdatePassword }) => {
   const [activeTab, setActiveTab] = useState<Tab>('billing');
   const [isLoading, setIsLoading] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [activationLoading, setActivationLoading] = useState(false);
-  
-  // Billing Cycle Selection state
-  const [selectedCycle, setSelectedCycle] = useState<'monthly' | 'yearly'>(initialBillingCycle);
 
   // Settings Form State
   const [companyName, setCompanyName] = useState(user?.companyName || '');
@@ -63,9 +59,8 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
 
   const handleActivate = () => {
       setActivationLoading(true);
-      const link = STRIPE_LINKS[selectedCycle];
-      // Redirect to Stripe
-      window.location.href = link;
+      // Always use monthly link
+      window.location.href = STRIPE_LINKS.monthly;
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -139,8 +134,8 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
         
         {/* Upgrade Banner (If not active) */}
         {!isActive && (
-            <div className="mb-8 p-6 rounded-2xl border flex flex-col lg:flex-row items-center justify-between gap-6 bg-indigo-50 border-indigo-100">
-                <div className="flex items-center gap-4 w-full lg:w-auto">
+            <div className="mb-8 p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-6 bg-indigo-50 border-indigo-100">
+                <div className="flex items-center gap-4 w-full md:w-auto">
                     <div className="p-3 rounded-full shrink-0 bg-indigo-100 text-indigo-600">
                         <Zap size={24} fill="currentColor" />
                     </div>
@@ -149,41 +144,23 @@ export const BillingPortal: React.FC<BillingPortalProps> = ({ user, onBack, onLo
                             Upgrade to Unlimited
                         </h3>
                         <p className="text-indigo-700">
-                            Remove the 3-quote limit and get unlimited access.
+                            Remove the 3-quote limit and get unlimited access for just <span className="font-bold">$29/month</span>.
                         </p>
                     </div>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto items-center">
-                    {/* Cycle Toggle */}
-                    <div className="bg-white/50 p-1 rounded-lg flex">
-                         <button 
-                            onClick={() => setSelectedCycle('monthly')}
-                            className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${selectedCycle === 'monthly' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-                         >
-                             Monthly ($29)
-                         </button>
-                         <button 
-                            onClick={() => setSelectedCycle('yearly')}
-                            className={`px-4 py-2 text-sm font-semibold rounded-md transition-all ${selectedCycle === 'yearly' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}
-                         >
-                             Yearly ($299)
-                         </button>
-                    </div>
-
-                    <div className="flex flex-col items-center gap-2 w-full sm:w-auto">
-                        <button 
-                            onClick={handleActivate}
-                            disabled={activationLoading}
-                            className="w-full sm:w-auto px-6 py-3 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200"
-                        >
-                            {activationLoading ? 'Redirecting...' : (
-                                <>
-                                    Activate Pro Plan <ExternalLink size={16} />
-                                </>
-                            )}
-                        </button>
-                    </div>
+                <div className="flex flex-col items-center gap-2 w-full md:w-auto">
+                    <button 
+                        onClick={handleActivate}
+                        disabled={activationLoading}
+                        className="w-full md:w-auto px-6 py-3 rounded-xl font-bold shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200"
+                    >
+                        {activationLoading ? 'Redirecting...' : (
+                            <>
+                                Activate Pro Plan <ExternalLink size={16} />
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         )}

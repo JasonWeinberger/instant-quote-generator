@@ -21,6 +21,5 @@ export const INDUSTRIES: IndustryOption[] = [
 // 5. Copy the generated link (starts with buy.stripe.com) and paste it below.
 
 export const STRIPE_LINKS = {
-  monthly: 'https://buy.stripe.com/test_monthly_placeholder', // REPLACE THIS
-  yearly: 'https://buy.stripe.com/test_yearly_placeholder',   // REPLACE THIS
+  monthly: 'https://buy.stripe.com/8x28wP4zO19b8yx2cV8Vi0F', // Real Stripe Link
 };
