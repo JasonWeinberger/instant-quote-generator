@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 7
+// Force refresh: 8
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -375,6 +375,20 @@ const App: React.FC = () => {
               if (error.message.includes('already registered') || error.status === 400 || error.status === 422) {
                    return { result: 'existing_user' };
               }
+
+              // NEW: Handle Rate Limits (429)
+              // This happens if the user refreshes the success page or testing triggers multiple calls.
+              // We assume the previous attempt succeeded in sending the email.
+              const isRateLimit = 
+                error.status === 429 || 
+                error.message.toLowerCase().includes('rate limit') || 
+                error.message.toLowerCase().includes('too many requests') ||
+                error.message.toLowerCase().includes('security purposes');
+
+              if (isRateLimit) {
+                  return { result: 'confirmation_required' };
+              }
+
               throw error;
           }
 

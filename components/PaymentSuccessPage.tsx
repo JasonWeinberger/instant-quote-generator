@@ -88,6 +88,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
                     We've created your Pro account! <br/><br/>
                     Please check your email <strong>({targetEmail})</strong> and click the verification link to activate your unlimited access.
+                    <br/><span className="text-xs text-slate-400 mt-2 block">(Check your spam folder if you don't see it)</span>
                  </p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return to Login
