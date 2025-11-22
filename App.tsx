@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 9
+// Force refresh: 10
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -362,10 +362,8 @@ const App: React.FC = () => {
           }
 
           // 2. Not logged in. Attempt to create new account.
-          // We do this to "Auto-Activate".
           const tempPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
           
-          // Ensure we persist the intent to upgrade if this process gets interrupted
           localStorage.setItem('pendingUpgradeEmail', email);
 
           const { data, error } = await supabase.auth.signUp({ 
@@ -380,9 +378,6 @@ const App: React.FC = () => {
           });
 
           if (data.user) {
-              // Success: New user created OR existing user returned (depends on config)
-              
-              // Upsert to ensure DB is in sync
               const { error: upsertError } = await supabase.from('users').upsert({ 
                 id: data.user.id, 
                 email: email,
@@ -393,19 +388,16 @@ const App: React.FC = () => {
               if (upsertError) console.error("Upsert failed but continuing:", upsertError);
 
               if (data.session) {
-                  // If we have a session, we are good to go!
                   await fetchUserProfile(data.user.id, email);
                   localStorage.removeItem('pendingUpgradeEmail'); 
                   setCurrentView('landing');
                   return { result: 'success' };
               } else {
-                   // NO SESSION = Email Confirmation Required
                    return { result: 'confirmation_required' };
               }
           }
 
           if (error) {
-              // HANDLE ERRORS
               const isRateLimit = 
                 error.status === 429 || 
                 error.message.toLowerCase().includes('rate limit') || 
@@ -417,20 +409,14 @@ const App: React.FC = () => {
                 error.status === 400 || 
                 error.status === 422;
 
-              // If user already exists, they need to log in to apply the upgrade.
               if (isAlreadyRegistered) {
-                   // Try to resend verification email just in case they are unverified
-                   // Note: Supabase might rate limit this too, so we swallow errors here.
                    await supabase.auth.resend({
                        type: 'signup',
                        email: email
-                   }).catch(() => {}); // Swallow resend errors (likely rate limits or already verified)
-
+                   }).catch(() => {});
                    return { result: 'existing_user' };
               }
 
-              // If rate limit on sign up, user probably tried multiple times.
-              // Assume an email was sent on the first try.
               if (isRateLimit) {
                   return { result: 'confirmation_required' };
               }
@@ -924,4 +910,46 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                       </div>
                       <div className="relative z-10">
                            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-white/30">
-                              <Zap size={32
+                              <Zap size={32} className="text-white" />
+                           </div>
+                           <h2 className="text-2xl font-bold mb-2">Usage Limit Reached</h2>
+                           <p className="text-indigo-100">
+                               You've used all {MAX_FREE_QUOTES} free quotes for today.
+                           </p>
+                      </div>
+                  </div>
+
+                  <div className="p-8 text-center">
+                      <h3 className="text-lg font-bold text-slate-900 mb-4">Upgrade for Unlimited Access</h3>
+                      <ul className="text-left space-y-3 mb-8 max-w-xs mx-auto">
+                          {[
+                             "Unlimited AI Estimates",
+                             "Save & Export History",
+                             "Company Branding on Quotes"
+                          ].map((feat, i) => (
+                              <li key={i} className="flex items-center gap-3 text-slate-600">
+                                  <Check size={16} className="text-green-500 shrink-0" />
+                                  <span className="text-sm">{feat}</span>
+                              </li>
+                          ))}
+                      </ul>
+                      
+                      <button 
+                        onClick={handleUpgradeClick}
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-4"
+                      >
+                          Get Unlimited Access <ArrowRight size={18} />
+                      </button>
+                      
+                      <p className="text-xs text-slate-400">
+                          One-time setup. Cancel anytime.
+                      </p>
+                  </div>
+              </div>
+          </div>
+      )}
+    </div>
+  );
+};
+
+export default App;
