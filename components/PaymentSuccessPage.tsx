@@ -84,10 +84,11 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
                      <Mail size={32} />
                  </div>
-                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Account</h2>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-                    We've created your Pro account! <br/><br/>
-                    Please check your email <strong>({targetEmail})</strong> and click the verification link to activate your unlimited access.
+                    We've sent a verification link to <strong>{targetEmail}</strong>.
+                    <br/><br/>
+                    Please click the link to activate your unlimited access.
                     <br/><span className="text-xs text-slate-400 mt-2 block">(Check your spam folder if you don't see it)</span>
                  </p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
@@ -108,6 +109,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Account Exists</h2>
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
                     Your payment was successful! It looks like you already have an account with this email.
+                    <br/><br/>
+                    Please log in to access your Pro features.
                  </p>
                  <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Log In to Access Pro <ArrowRight size={16} />
