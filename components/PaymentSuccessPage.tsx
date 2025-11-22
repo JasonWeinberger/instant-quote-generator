@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Check, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
+import { Check, Loader2, AlertCircle } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {

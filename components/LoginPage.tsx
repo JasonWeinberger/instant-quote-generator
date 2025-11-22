@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
   onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;

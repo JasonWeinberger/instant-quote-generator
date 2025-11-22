@@ -248,7 +248,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
+  const handleAuth = async (email: string, password?: string, _isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
           const { error } = await supabase.auth.signInWithPassword({ email, password });
           if (error) throw error;
@@ -526,6 +526,7 @@ const App: React.FC = () => {
              </div>
           </div>
         )}
+
       </nav>
 
       {/* Hero Section */}
