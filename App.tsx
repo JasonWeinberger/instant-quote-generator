@@ -344,94 +344,95 @@ const App: React.FC = () => {
   };
 
   // PLG FLOW: Passwordless Activation
-  // We wrap the DB logic in a Promise.race to prevent indefinite hanging on the UI.
-  // If the timeout wins, we assume success and let the background process continue (optimistic).
-  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' }> => {
+  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'error' }> => {
       if (supabase) {
           const client = supabase!;
+          console.log("Starting activation for:", email);
 
-          const activationLogic = async (): Promise<{ result: 'success' | 'existing_user' }> => {
-              try {
-                // 1. Check if we already have a session
-                const { data: sessionData } = await client.auth.getSession();
-                
-                if (sessionData.session) {
-                     await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-                     try {
-                        await client.from('users').upsert({ 
-                            id: sessionData.session.user.id,
-                            email: sessionData.session.user.email,
-                            status: 'active', 
-                            plan: 'pro',
-                            updated_at: new Date().toISOString()
-                        });
-                     } catch (e) { console.warn(e); }
-    
-                     await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-                     localStorage.removeItem('pendingUpgradeEmail');
-                     return { result: 'success' };
+          try {
+            // 1. Check if we already have a session
+            const { data: sessionData, error: sessionError } = await client.auth.getSession();
+            
+            if (sessionError) {
+                console.error('getSession error', sessionError);
+            }
+            
+            if (sessionData.session) {
+                 console.log("Session exists, upgrading user.");
+                 // We have a session, ensure user is active in DB
+                 await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+                 try {
+                    await client.from('users').upsert({ 
+                        id: sessionData.session.user.id,
+                        email: sessionData.session.user.email,
+                        status: 'active', 
+                        plan: 'pro',
+                        updated_at: new Date().toISOString()
+                    });
+                 } catch (e) { 
+                     console.error("Upsert failed for existing session", e);
+                     return { result: 'error' };
+                 }
+
+                 await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+                 localStorage.removeItem('pendingUpgradeEmail');
+                 return { result: 'success' };
+            }
+
+            // 2. Not logged in. Attempt Passwordless Signup (Random Password)
+            const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+            
+            const { data, error } = await client.auth.signUp({ 
+                email, 
+                password: randomPassword,
+                options: {
+                    data: { status: 'active', plan: 'pro' }
                 }
-    
-                // 2. Not logged in. Attempt Passwordless Signup (Random Password)
-                const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-                
-                const { data, error } = await client.auth.signUp({ 
-                    email, 
-                    password: randomPassword,
-                    options: {
-                        data: { status: 'active', plan: 'pro' }
-                    }
+            });
+
+            if (error) {
+                console.error('signUp error', error);
+                const msg = (error.message || '').toLowerCase();
+                const isAlreadyRegistered = 
+                    msg.includes('already registered') || 
+                    msg.includes('user already exists') ||
+                    error.status === 400 || 
+                    error.status === 422;
+
+                if (isAlreadyRegistered) {
+                    return { result: 'existing_user' };
+                }
+                // Strict error handling
+                return { result: 'error' };
+            }
+
+            if (!data.user || !data.session) {
+                console.error('signUp returned no session or no user', data);
+                return { result: 'error' };
+            }
+
+            // 3. Upsert Pro user row
+            try {
+                await client.from('users').upsert({ 
+                    id: data.user.id, 
+                    email: email,
+                    status: 'active',
+                    plan: 'pro',
+                    updated_at: new Date().toISOString()
                 });
-    
-                if (error) {
-                    const isAlreadyRegistered = 
-                        error.message.toLowerCase().includes('already registered') || 
-                        error.status === 400 || 
-                        error.status === 422;
-    
-                    if (isAlreadyRegistered) {
-                        return { result: 'existing_user' };
-                    }
-                    console.warn("Signup non-fatal error:", error);
-                    return { result: 'success' };
-                }
-    
-                if (data.user) {
-                    if (data.session) {
-                        try {
-                            await client.from('users').upsert({ 
-                                id: data.user.id, 
-                                email: email,
-                                status: 'active',
-                                plan: 'pro'
-                            });
-                            await fetchUserProfile(data.user.id, email);
-                        } catch (e) { console.warn(e); }
-                    }
-                    
-                    localStorage.removeItem('pendingUpgradeEmail'); 
-                    return { result: 'success' };
-                }
-                return { result: 'success' };
-    
-              } catch (e) {
-                  console.error("Activation exception:", e);
-                  return { result: 'success' };
-              }
-          };
+                await fetchUserProfile(data.user.id, email);
+            } catch (e) {
+                console.error("Upsert failed for new user", e);
+                return { result: 'error' };
+            }
+            
+            localStorage.removeItem('pendingUpgradeEmail'); 
+            return { result: 'success' };
 
-          // Race against a 7 second timeout
-          // If the timeout wins, we return 'success' to unblock the UI.
-          // The activationLogic promise will NOT be cancelled, so it can finish in the background
-          // as long as we don't reload the page (which we fixed in PaymentSuccessPage).
-          const timeoutPromise = new Promise<{ result: 'success' | 'existing_user' }>((resolve) => {
-              setTimeout(() => {
-                  console.warn("Activation logic timed out, proceeding optimistically.");
-                  resolve({ result: 'success' });
-              }, 7000);
-          });
-
-          return Promise.race([activationLogic(), timeoutPromise]);
+          } catch (e) {
+              console.error("Activation exception:", e);
+              return { result: 'error' };
+          }
 
       } else {
           // DEMO MODE

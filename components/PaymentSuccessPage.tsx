@@ -4,7 +4,7 @@ import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' }>;
+  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'error' }>;
   onComplete: () => void;
 }
 
@@ -17,17 +17,16 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const activationAttempted = useRef(false);
 
   useEffect(() => {
-    // Show manual button after a few seconds if things are taking a while, 
-    // giving the user an escape hatch without interrupting the process.
-    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 3500);
+    // Show manual button after a few seconds if things are taking a while
+    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 4000);
     return () => clearTimeout(manualButtonTimer);
   }, []);
 
   useEffect(() => {
-    // 2. Guard: Do not run activation if user is already active and logged in.
+    // Guard: Do not run activation if user is already active and logged in.
     if (user?.status === 'active') {
         setStatus('success');
-        setTimeout(() => onComplete(), 1500);
+        setTimeout(() => { window.location.href = '/'; }, 1000);
         return;
     }
 
@@ -39,7 +38,6 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         const emailToUse = pendingEmail || user?.email;
 
         if (!emailToUse) {
-            // If we can't find an email, we can't activate. 
             setStatus('error');
             setErrorMessage("Could not find account details. Please contact support.");
             return;
@@ -49,21 +47,21 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         try {
             const response = await onActivate(emailToUse);
             
-            if (response.result === 'existing_user') {
+            if (response.result === 'success') {
+                setStatus('success');
+                // Strict success redirect
+                setTimeout(() => { window.location.href = '/'; }, 1000);
+            } else if (response.result === 'existing_user') {
                 setStatus('existing_user');
             } else {
-                setStatus('success');
-                // Use the onComplete callback instead of reloading the page.
-                // This ensures we don't kill the background processes that might be still finishing up
-                // (e.g. if we hit the optimistic timeout in App.tsx)
-                setTimeout(() => onComplete(), 1500);
+                // 'error'
+                setStatus('error');
+                setErrorMessage('We could not activate your account automatically. Please try logging in or contact support.');
             }
         } catch (err: any) {
-            console.error("Activation error:", err);
-            // Even on error, show success and let the user in. 
-            // The backend state might be lagging but we shouldn't block access.
-            setStatus('success');
-            setTimeout(() => onComplete(), 1500);
+            console.error("Activation error in component:", err);
+            setStatus('error');
+            setErrorMessage('Unexpected error while activating your account.');
         }
     };
 
@@ -72,7 +70,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   }, []); 
 
   const handleManualContinue = () => {
-      onComplete();
+      // Manual escape hatch
+      window.location.href = '/';
   };
 
   // --- UI STATES ---
