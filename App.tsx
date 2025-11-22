@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 6
+// Force refresh: 7
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -59,34 +59,53 @@ const App: React.FC = () => {
       if (!supabase) return;
 
       try {
-          const { data } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
+          // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
+          const [authResponse, dbResponse] = await Promise.all([
+              supabase.auth.getUser(),
+              supabase.from('users').select('*').eq('id', userId).maybeSingle()
+          ]);
 
-          if (data) {
-              const u: User = {
-                  id: data.id,
-                  email: data.email || email,
-                  plan: 'pro', 
-                  status: data.status || 'trial',
-                  trialStartDate: new Date(data.created_at).getTime(),
-                  companyName: data.company_name,
-                  companyPhone: data.company_phone,
-                  companyAddress: data.company_address
-              };
-              setUser(u);
-          } else {
-              const newUser: User = {
+          const authUser = authResponse.data.user;
+          const authMetadata = authUser?.user_metadata || {};
+          const dbData = dbResponse.data;
+
+          // Determine effective status
+          // 1. Default to what's in DB
+          let status = dbData?.status || 'trial';
+          let plan = dbData?.plan || 'starter';
+
+          // 2. Override if Auth Metadata says 'active' (Verified Payment) but DB is stale/missing
+          // This fixes the issue where RLS prevented the initial DB write during sign-up (because user wasn't confirmed yet)
+          if (authMetadata.status === 'active' && status !== 'active') {
+              console.log("Syncing 'Active' status from Auth Metadata to Public Profile...");
+              status = 'active';
+              plan = 'pro';
+              
+              // Heal the DB record now that we have a confirmed session
+              await supabase.from('users').upsert({ 
                   id: userId,
                   email: email,
-                  plan: 'starter',
-                  status: 'trial',
-                  trialStartDate: Date.now()
-              };
-              setUser(newUser);
+                  status: 'active',
+                  plan: 'pro',
+                  // Preserve existing data if any
+                  company_name: dbData?.company_name || authMetadata.company_name,
+                  company_phone: dbData?.company_phone,
+                  company_address: dbData?.company_address,
+                  updated_at: new Date().toISOString()
+              });
           }
+
+          const u: User = {
+              id: userId,
+              email: dbData?.email || email, // Prefer DB email, fallback to auth email
+              plan: plan as 'starter' | 'pro',
+              status: status as 'active' | 'trial' | 'expired' | 'cancelled',
+              trialStartDate: dbData?.created_at ? new Date(dbData.created_at).getTime() : Date.now(),
+              companyName: dbData?.company_name,
+              companyPhone: dbData?.company_phone,
+              companyAddress: dbData?.company_address
+          };
+          setUser(u);
       } catch (err) {
           console.error("Unexpected error fetching profile:", err);
       }

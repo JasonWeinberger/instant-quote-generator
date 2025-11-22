@@ -10,6 +10,7 @@ interface PaymentSuccessPageProps {
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'confirmation' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [targetEmail, setTargetEmail] = useState<string>('');
   
   // Ref to track if activation has already been attempted.
   const activationAttempted = useRef(false);
@@ -29,16 +30,17 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
         
         // 2. Fallback: If user is already logged in
-        const targetEmail = pendingEmail || user?.email;
+        const emailToUse = pendingEmail || user?.email;
 
-        if (!targetEmail) {
+        if (!emailToUse) {
             setStatus('error');
             setErrorMessage("Could not find account details. Please contact support.");
             return;
         }
+        setTargetEmail(emailToUse);
 
         try {
-            const response = await onActivate(targetEmail);
+            const response = await onActivate(emailToUse);
             if (response.result === 'confirmation_required') {
                 setStatus('confirmation');
             } else if (response.result === 'existing_user') {
@@ -82,10 +84,10 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
                      <Mail size={32} />
                  </div>
-                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Confirm Your Email</h2>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Account</h2>
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-                    Your payment was successful and your Pro account has been created! <br/><br/>
-                    For security, Supabase requires you to <strong>click the link sent to your email</strong> to finish activating your account.
+                    We've created your Pro account! <br/><br/>
+                    Please check your email <strong>({targetEmail})</strong> and click the verification link to activate your unlimited access.
                  </p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return to Login
