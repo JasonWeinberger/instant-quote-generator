@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 11
+// Force refresh: 12
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -131,16 +131,17 @@ const App: React.FC = () => {
     }
 
     // 3. Check Auth: Supabase OR LocalStorage
-    if (isSupabaseConfigured() && supabase) {
+    const client = supabase;
+    if (isSupabaseConfigured() && client) {
         // REAL MODE: Check Supabase Session
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
+        client.auth.getSession().then(async ({ data: { session } }) => {
             if (session) {
                 await fetchUserProfile(session.user.id, session.user.email || '');
             }
         });
         
         // Listen for changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
             if (!session) {
                 setUser(null);
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -151,17 +152,14 @@ const App: React.FC = () => {
                      const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
                      const sessionEmail = session.user.email;
                      
-                     // Using local variable for supabase in callback to be safe, or just direct access since we are in useEffect with dependency
-                     // But inside this closure, 'supabase' refers to the imported value.
-                     
                      if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
                          console.log("Applying pending upgrade for logged in user...");
                          // Update Metadata
-                         await supabase.auth.updateUser({
+                         await client.auth.updateUser({
                              data: { status: 'active', plan: 'pro' }
                          });
                          // Update DB
-                         await supabase.from('users').upsert({
+                         await client.from('users').upsert({
                              id: session.user.id,
                              email: sessionEmail,
                              status: 'active',
@@ -274,8 +272,9 @@ const App: React.FC = () => {
       setHistory(updatedHistory);
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
-      if (user && isSupabaseConfigured() && supabase) {
-          const dbResponse = await supabase.from('quotes').insert({
+      const client = supabase;
+      if (user && isSupabaseConfigured() && client) {
+          const dbResponse = await client.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -295,8 +294,9 @@ const App: React.FC = () => {
   };
 
   const handleAuth = async (email: string, password?: string) => {
-      if (isSupabaseConfigured() && supabase && password) {
-          const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const client = supabase;
+      if (isSupabaseConfigured() && client && password) {
+          const { error } = await client.auth.signInWithPassword({ email, password });
           if (error) throw error;
           setCurrentView('landing');
       } else {
@@ -323,8 +323,9 @@ const App: React.FC = () => {
   };
 
   const handleResetPassword = async (email: string) => {
-      if (isSupabaseConfigured() && supabase) {
-          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const client = supabase;
+      if (isSupabaseConfigured() && client) {
+          const { error } = await client.auth.resetPasswordForEmail(email, {
               redirectTo: window.location.origin,
           });
           if (error) throw error;
@@ -332,8 +333,9 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePassword = async (password: string) => {
-      if (isSupabaseConfigured() && supabase) {
-          const { error } = await supabase.auth.updateUser({ password: password });
+      const client = supabase;
+      if (isSupabaseConfigured() && client) {
+          const { error } = await client.auth.updateUser({ password: password });
           if (error) throw error;
       }
   };
@@ -467,8 +469,9 @@ const App: React.FC = () => {
   }, [fetchUserProfile, user]);
 
   const handleLogout = async () => {
-      if (isSupabaseConfigured() && supabase) {
-          await supabase.auth.signOut();
+      const client = supabase;
+      if (isSupabaseConfigured() && client) {
+          await client.auth.signOut();
       }
       setUser(null);
       localStorage.removeItem('quoteGenUser');
@@ -477,8 +480,9 @@ const App: React.FC = () => {
 
   const handleUpdateUser = async (updatedUser: User) => {
       setUser(updatedUser);
-      if (isSupabaseConfigured() && supabase && user?.id) {
-          await supabase.from('users').update({
+      const client = supabase;
+      if (isSupabaseConfigured() && client && user?.id) {
+          await client.from('users').update({
                 company_name: updatedUser.companyName,
                 company_phone: updatedUser.companyPhone,
                 company_address: updatedUser.companyAddress
