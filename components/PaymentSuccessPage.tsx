@@ -5,9 +5,10 @@ import { User } from '../shared-types';
 interface PaymentSuccessPageProps {
   user: User | null;
   onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' }>;
+  onComplete: () => void;
 }
 
-export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
+export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate, onComplete }) => {
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
@@ -15,28 +16,18 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   
   const activationAttempted = useRef(false);
 
-  // 1. NUCLEAR OPTION: Unconditional Redirect Timer
-  // If for ANY reason (network error, logic bug, cosmic rays) the user is still here 
-  // after 5 seconds, we force them to the dashboard.
   useEffect(() => {
-    const forceRedirectTimer = setTimeout(() => {
-      console.warn("Force redirect timeout triggered - sending to dashboard");
-      window.location.href = '/';
-    }, 5000);
-
-    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 2500);
-
-    return () => {
-      clearTimeout(forceRedirectTimer);
-      clearTimeout(manualButtonTimer);
-    };
+    // Show manual button after a few seconds if things are taking a while, 
+    // giving the user an escape hatch without interrupting the process.
+    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 3500);
+    return () => clearTimeout(manualButtonTimer);
   }, []);
 
   useEffect(() => {
     // 2. Guard: Do not run activation if user is already active and logged in.
     if (user?.status === 'active') {
         setStatus('success');
-        setTimeout(() => window.location.href = '/', 1000);
+        setTimeout(() => onComplete(), 1500);
         return;
     }
 
@@ -49,9 +40,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
 
         if (!emailToUse) {
             // If we can't find an email, we can't activate. 
-            // But the Force Redirect Timer above will still save the user eventually.
             setStatus('error');
-            setErrorMessage("Could not find account details. Redirecting...");
+            setErrorMessage("Could not find account details. Please contact support.");
             return;
         }
         setTargetEmail(emailToUse);
@@ -63,15 +53,17 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                 setStatus('existing_user');
             } else {
                 setStatus('success');
-                // Fast redirect on success
-                setTimeout(() => window.location.href = '/', 1000);
+                // Use the onComplete callback instead of reloading the page.
+                // This ensures we don't kill the background processes that might be still finishing up
+                // (e.g. if we hit the optimistic timeout in App.tsx)
+                setTimeout(() => onComplete(), 1500);
             }
         } catch (err: any) {
             console.error("Activation error:", err);
             // Even on error, show success and let the user in. 
             // The backend state might be lagging but we shouldn't block access.
             setStatus('success');
-            setTimeout(() => window.location.href = '/', 1000);
+            setTimeout(() => onComplete(), 1500);
         }
     };
 
@@ -80,7 +72,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   }, []); 
 
   const handleManualContinue = () => {
-      window.location.href = '/';
+      onComplete();
   };
 
   // --- UI STATES ---
@@ -131,7 +123,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         
         {status === 'success' ? (
             <div className="relative mb-6">
-                 <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg">
+                 <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg animate-fade-in-up">
                     <Check size={32} strokeWidth={3} />
                 </div>
             </div>
@@ -161,7 +153,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         )}
         
         {/* Fail-safe manual button if auto-redirect hangs or is blocked */}
-        {showManualButton && (
+        {showManualButton && status !== 'success' && (
             <button 
                 onClick={handleManualContinue}
                 className="mt-6 text-sm font-bold text-indigo-600 hover:text-indigo-800 underline transition-colors animate-fade-in-up"
