@@ -56,13 +56,14 @@ const App: React.FC = () => {
 
   // Memoize fetchUserProfile to use in other callbacks
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
-      if (!supabase) return;
+      const client = supabase;
+      if (!client) return;
 
       try {
           // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
           const [authResponse, dbResponse] = await Promise.all([
-              supabase.auth.getUser(),
-              supabase.from('users').select('*').eq('id', userId).maybeSingle()
+              client.auth.getUser(),
+              client.from('users').select('*').eq('id', userId).maybeSingle()
           ]);
 
           const authUser = authResponse.data.user;
@@ -82,7 +83,7 @@ const App: React.FC = () => {
               plan = 'pro';
               
               // Heal the DB record now that we have a confirmed session
-              await supabase.from('users').upsert({ 
+              await client.from('users').upsert({ 
                   id: userId,
                   email: email,
                   status: 'active',
@@ -149,6 +150,9 @@ const App: React.FC = () => {
                  if (session) {
                      const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
                      const sessionEmail = session.user.email;
+                     
+                     // Using local variable for supabase in callback to be safe, or just direct access since we are in useEffect with dependency
+                     // But inside this closure, 'supabase' refers to the imported value.
                      
                      if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
                          console.log("Applying pending upgrade for logged in user...");
@@ -336,15 +340,16 @@ const App: React.FC = () => {
 
   // --- REFACTORED ACTIVATION LOGIC ---
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
-      if (isSupabaseConfigured() && supabase) {
+      const client = supabase;
+      if (isSupabaseConfigured() && client) {
           // 1. Check if we already have a session (maybe user was logged in already)
-          const { data: sessionData } = await supabase.auth.getSession();
+          const { data: sessionData } = await client.auth.getSession();
           if (sessionData.session) {
                // Logged in already. Update status.
-               await supabase.auth.updateUser({
+               await client.auth.updateUser({
                     data: { status: 'active', plan: 'pro' }
                });
-               const { error } = await supabase
+               const { error } = await client
                 .from('users')
                 .upsert({ 
                     id: sessionData.session.user.id,
@@ -366,7 +371,7 @@ const App: React.FC = () => {
           
           localStorage.setItem('pendingUpgradeEmail', email);
 
-          const { data, error } = await supabase.auth.signUp({ 
+          const { data, error } = await client.auth.signUp({ 
             email, 
             password: tempPassword,
             options: {
@@ -381,7 +386,7 @@ const App: React.FC = () => {
           if (data.user) {
               // If session is immediate (shouldn't happen with confirm enabled, but good safety)
               if (data.session) {
-                  const { error: upsertError } = await supabase.from('users').upsert({ 
+                  const { error: upsertError } = await client.from('users').upsert({ 
                     id: data.user.id, 
                     email: email,
                     status: 'active',
@@ -413,7 +418,7 @@ const App: React.FC = () => {
 
               if (isAlreadyRegistered) {
                    // Try to resend verification email if account exists but unverified
-                   const { error: resendError } = await supabase.auth.resend({
+                   const { error: resendError } = await client.auth.resend({
                        type: 'signup',
                        email: email,
                        options: { emailRedirectTo: window.location.origin }
