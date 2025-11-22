@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { generateQuote } from './services/geminiService';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { SupabaseClient } from '@supabase/supabase-js';
 import { Industry, QuoteResult, HistoryItem, User } from './shared-types';
 import { IndustrySelector } from './components/IndustrySelector';
 import { QuoteResultCard } from './components/QuoteResultCard';
@@ -9,13 +8,13 @@ import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { EmailCaptureModal } from './components/EmailCaptureModal';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Hammer, Wrench, Check } from 'lucide-react';
 
-// Force refresh: 16 - Fixed TS18047
 const MAX_FREE_QUOTES = 3;
 
-type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
+type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_password';
 
 const BrandLogo: React.FC = () => (
   <div className="relative w-11 h-11 bg-[#003366] rounded-full flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-white ring-1 ring-slate-900/10">
@@ -48,17 +47,32 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   
-  // NEW: Email Capture State
+  // Email Capture State
   const [showEmailModal, setShowEmailModal] = useState(false);
 
   const resultRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
+  // Check for Reset Password URL on Mount
+  useEffect(() => {
+    const path = window.location.pathname;
+    const search = window.location.search;
+    const hash = window.location.hash;
+
+    if (
+        path === '/reset-password' || 
+        search.includes('type=recovery') || 
+        search.includes('access_token') ||
+        hash.includes('type=recovery')
+    ) {
+        setCurrentView('reset_password');
+    }
+  }, []);
+
   // Memoize fetchUserProfile to use in other callbacks
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       if (!supabase) return;
-      // Capture client in local scope with non-null assertion to guarantee type in async closures
       const client = supabase!;
 
       try {
@@ -78,9 +92,7 @@ const App: React.FC = () => {
           let plan = dbData?.plan || 'starter';
 
           // 2. Override if Auth Metadata says 'active' (Verified Payment) but DB is stale/missing
-          // This fixes the issue where RLS prevented the initial DB write during sign-up (because user wasn't confirmed yet)
           if (authMetadata.status === 'active' && status !== 'active') {
-              console.log("Syncing 'Active' status from Auth Metadata to Public Profile...");
               status = 'active';
               plan = 'pro';
               
@@ -90,7 +102,6 @@ const App: React.FC = () => {
                   email: email,
                   status: 'active',
                   plan: 'pro',
-                  // Preserve existing data if any
                   company_name: dbData?.company_name || authMetadata.company_name,
                   company_phone: dbData?.company_phone,
                   company_address: dbData?.company_address,
@@ -100,7 +111,7 @@ const App: React.FC = () => {
 
           const u: User = {
               id: userId,
-              email: dbData?.email || email, // Prefer DB email, fallback to auth email
+              email: dbData?.email || email, 
               plan: plan as 'starter' | 'pro',
               status: status as 'active' | 'trial' | 'expired' | 'cancelled',
               trialStartDate: dbData?.created_at ? new Date(dbData.created_at).getTime() : Date.now(),
@@ -122,7 +133,7 @@ const App: React.FC = () => {
     const storedCount = localStorage.getItem('quoteUsageCount');
     if (storedCount) setUsageCount(parseInt(storedCount, 10));
 
-    // 2. Load local history (fallback)
+    // 2. Load local history
     const storedHistory = localStorage.getItem('quoteHistory');
     if (storedHistory) {
       try {
@@ -132,9 +143,8 @@ const App: React.FC = () => {
       }
     }
 
-    // 3. Check Auth: Supabase OR LocalStorage
+    // 3. Check Auth
     if (!isSupabaseConfigured() || !supabase) {
-        // DEMO MODE: Local Storage
         const storedUser = localStorage.getItem('quoteGenUser');
         if (storedUser) {
             try {
@@ -149,34 +159,31 @@ const App: React.FC = () => {
     }
 
     // REAL MODE: Check Supabase Session
-    // At this point we *know* supabase is not null.
     const client = supabase!;
 
     client.auth.getSession().then(async ({ data: { session } }) => {
         if (session) {
+            // If we are in the reset flow, do NOT overwrite view state with landing yet
+            // We only fetch profile
             await fetchUserProfile(session.user.id, session.user.email || '');
         }
     });
     
-    // Listen for changes
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-        if (!session) {
+        if (event === 'PASSWORD_RECOVERY') {
+            setCurrentView('reset_password');
+        } else if (!session) {
             setUser(null);
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-             // CRITICAL FIX for "Existing Users":
-             // If the user just paid (based on localStorage flag) and logs in (or clicks magic link),
-             // force update their status to 'active'.
              if (session) {
+                 // Check for pending upgrades
                  const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
                  const sessionEmail = session.user.email;
                  
                  if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
-                     console.log("Applying pending upgrade for logged in user...");
-                     // Update Metadata
                      await client.auth.updateUser({
                          data: { status: 'active', plan: 'pro' }
                      });
-                     // Update DB
                      await client.from('users').upsert({
                          id: session.user.id,
                          email: sessionEmail,
@@ -184,14 +191,10 @@ const App: React.FC = () => {
                          plan: 'pro',
                          updated_at: new Date().toISOString()
                      });
-                     // Clear flag
                      localStorage.removeItem('pendingUpgradeEmail');
                  }
-
                  await fetchUserProfile(session.user.id, session.user.email || '');
              }
-        } else if (event === 'PASSWORD_RECOVERY') {
-             setCurrentView('billing'); 
         }
     });
     return () => subscription.unsubscribe();
@@ -202,7 +205,6 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
         setCurrentView('payment_success');
-        // Clean URL without refresh
         window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -216,24 +218,19 @@ const App: React.FC = () => {
   const isLimitReached = (user?.status !== 'active') && (usageCount >= MAX_FREE_QUOTES);
   const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
-  // --- MODIFIED UPGRADE FLOW ---
   const handleUpgradeClick = () => {
-      // Step 1: Open Modal to capture email first
       setShowEmailModal(true);
   };
 
   const handleEmailSubmit = (email: string) => {
-      // Step 2: Save email pending upgrade
       localStorage.setItem('pendingUpgradeEmail', email);
       setShowEmailModal(false);
-      
-      // Step 3: Redirect to Stripe
       window.open(STRIPE_LINKS.monthly, '_blank');
   };
 
   const handleGenerateClick = async () => {
     if (isLimitReached) {
-        handleUpgradeClick(); // Changed from direct checkout
+        handleUpgradeClick();
         return;
     }
     
@@ -278,14 +275,13 @@ const App: React.FC = () => {
       
       if (user && supabase) {
           const client = supabase!;
-          const dbResponse = await client.from('quotes').insert({
+          await client.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
               zip_code: zipCode,
               result: quoteData
           });
-          if (dbResponse.error) console.warn("Failed to save quote:", dbResponse.error.message);
       }
 
       setResult(quoteData);
@@ -304,7 +300,7 @@ const App: React.FC = () => {
           if (error) throw error;
           setCurrentView('landing');
       } else {
-          // DEMO/LOCAL AUTH
+          // Demo Mode
           await new Promise(resolve => setTimeout(resolve, 1000));
           const existingUserStr = localStorage.getItem(`user_${email}`);
           let userData: User;
@@ -326,11 +322,13 @@ const App: React.FC = () => {
       }
   };
 
+  // PLG FLOW: Forgot Password
   const handleResetPassword = async (email: string) => {
       if (supabase) {
           const client = supabase!;
+          // Redirects to /reset-password specifically for clean routing
           const { error } = await client.auth.resetPasswordForEmail(email, {
-              redirectTo: window.location.origin,
+              redirectTo: `${window.location.origin}/reset-password`,
           });
           if (error) throw error;
       }
@@ -344,129 +342,82 @@ const App: React.FC = () => {
       }
   };
 
-  // --- REFACTORED ACTIVATION LOGIC ---
+  // PLG FLOW: Passwordless Activation
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       if (supabase) {
-          // Scope client for type safety with non-null assertion
           const client = supabase!;
 
-          // 1. Check if we already have a session (maybe user was logged in already)
+          // 1. Check if already logged in
           const { data: sessionData } = await client.auth.getSession();
           if (sessionData.session) {
-               // Logged in already. Update status.
-               await client.auth.updateUser({
-                    data: { status: 'active', plan: 'pro' }
-               });
-               const { error } = await client
-                .from('users')
-                .upsert({ 
+               await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+               await client.from('users').upsert({ 
                     id: sessionData.session.user.id,
                     email: sessionData.session.user.email,
                     status: 'active', 
-                    plan: 'pro' 
+                    plan: 'pro',
+                    updated_at: new Date().toISOString()
                 });
-               
-               if (error) throw error;
-               
                await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
                localStorage.removeItem('pendingUpgradeEmail');
                setCurrentView('landing');
                return { result: 'success' };
           }
 
-          // 2. Not logged in. Attempt to create new account.
-          const tempPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+          // 2. Passwordless Signup (We generate a random secure password user never sees)
+          // This forces them to use "Forgot Password" later if they want to login on another device.
+          const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
           
-          localStorage.setItem('pendingUpgradeEmail', email);
-
+          // We do NOT use emailRedirectTo here because we want immediate session creation (assuming confirm is OFF)
           const { data, error } = await client.auth.signUp({ 
             email, 
-            password: tempPassword,
+            password: randomPassword,
             options: {
-                data: {
-                    status: 'active', 
-                    plan: 'pro'
-                }
+                data: { status: 'active', plan: 'pro' }
             }
           });
 
-          // Success handling
-          if (data.user) {
-              // If session is immediate (shouldn't happen with confirm enabled, but good safety)
-              if (data.session) {
-                  const { error: upsertError } = await client.from('users').upsert({ 
-                    id: data.user.id, 
-                    email: email,
-                    status: 'active',
-                    plan: 'pro'
-                  });
-                  
-                  if (upsertError) console.error("Upsert failed but continuing:", upsertError);
-                  await fetchUserProfile(data.user.id, email);
-                  localStorage.removeItem('pendingUpgradeEmail'); 
-                  setCurrentView('landing');
-                  return { result: 'success' };
-              } else {
-                   // User created but email confirmation required
-                   return { result: 'confirmation_required' };
-              }
+          if (data.user && data.session) {
+              // Success - Session created immediately
+              await client.from('users').upsert({ 
+                id: data.user.id, 
+                email: email,
+                status: 'active',
+                plan: 'pro'
+              });
+              
+              await fetchUserProfile(data.user.id, email);
+              localStorage.removeItem('pendingUpgradeEmail'); 
+              setCurrentView('landing');
+              return { result: 'success' };
           }
 
           if (error) {
-              const isRateLimit = 
-                error.status === 429 || 
-                error.message.toLowerCase().includes('rate limit') || 
-                error.message.toLowerCase().includes('too many requests') ||
-                error.message.toLowerCase().includes('security purposes');
-
+              // Check if user exists
               const isAlreadyRegistered = 
                 error.message.toLowerCase().includes('already registered') || 
                 error.status === 400 || 
                 error.status === 422;
 
               if (isAlreadyRegistered) {
-                   // Try to resend verification email if account exists but unverified
-                   const { error: resendError } = await client.auth.resend({
-                       type: 'signup',
-                       email: email,
-                       options: { emailRedirectTo: window.location.origin }
-                   });
-                   
-                   if (resendError) {
-                       console.warn("Resend failed:", resendError.message);
-                       // If we hit rate limit on resend, we just assume previous email is fine and tell user to check.
-                       if (resendError.message.toLowerCase().includes('rate limit') || resendError.status === 429) {
-                            return { result: 'confirmation_required' };
-                       }
-                   }
-
+                   // We cannot auto-login an existing user without password.
+                   // We must tell them to log in.
                    return { result: 'existing_user' };
               }
-
-              if (isRateLimit) {
-                  return { result: 'confirmation_required' };
-              }
-
               throw error;
           }
 
       } else {
-          // DEMO MODE MOCK
-          if (user) {
-            const updatedUser: User = { ...user, status: 'active' };
-            setUser(updatedUser);
-            localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
-          } else {
-               const newUser: User = {
-                  id: `local_paid_${Date.now()}`,
-                  email: email,
-                  plan: 'pro',
-                  status: 'active',
-                  trialStartDate: Date.now()
-              };
-              setUser(newUser);
-              localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-          }
+          // DEMO MODE
+          const newUser: User = {
+              id: `local_paid_${Date.now()}`,
+              email: email,
+              plan: 'pro',
+              status: 'active',
+              trialStartDate: Date.now()
+          };
+          setUser(newUser);
+          localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
           setShowPaywallModal(false);
           setCurrentView('landing');
           return { result: 'success' };
@@ -498,7 +449,15 @@ const App: React.FC = () => {
       }
   };
 
-  // View Router
+  // --- VIEWS ---
+
+  if (currentView === 'reset_password') {
+      return <ResetPasswordPage onSuccess={() => {
+          // Refresh page to clear URL params and load landing
+          window.location.href = '/'; 
+      }} />;
+  }
+
   if (currentView === 'payment_success') {
       return <PaymentSuccessPage user={user} onActivate={handlePaymentSuccessActivation} />;
   }
@@ -534,6 +493,8 @@ const App: React.FC = () => {
       );
   }
 
+  // --- LANDING PAGE ---
+  
   const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
     setMobileMenuOpen(false);
     ref.current?.scrollIntoView({ behavior: 'smooth' });
@@ -542,7 +503,6 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       
-      {/* Email Capture Modal */}
       <EmailCaptureModal 
         isOpen={showEmailModal} 
         onClose={() => setShowEmailModal(false)} 
@@ -550,7 +510,6 @@ const App: React.FC = () => {
         initialEmail={user?.email}
       />
 
-      {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
@@ -598,7 +557,6 @@ const App: React.FC = () => {
           </div>
         </div>
         
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-4 shadow-lg">
              <button type="button" onClick={() => scrollToSection(featuresRef)} className="block w-full text-left text-sm font-medium text-slate-600">How it works</button>

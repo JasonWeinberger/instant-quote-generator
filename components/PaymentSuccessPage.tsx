@@ -12,24 +12,22 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
   
-  // Ref to track if activation has already been attempted.
+  // Ref to track if activation has already been attempted to prevent double-firing
   const activationAttempted = useRef(false);
 
   useEffect(() => {
-    // 1. Guard: Do not run activation if user is already active.
+    // 1. Guard: Do not run activation if user is already active and logged in.
     if (user?.status === 'active') {
+        setStatus('success');
         return;
     }
 
     const activateAccount = async () => {
-        // Prevent multiple calls
         if (activationAttempted.current) return;
         activationAttempted.current = true;
 
-        // 1. Get email from local storage (set before Stripe redirect)
+        // 2. Get email from local storage (set before Stripe redirect)
         const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
-        
-        // 2. Fallback: If user is already logged in
         const emailToUse = pendingEmail || user?.email;
 
         if (!emailToUse) {
@@ -40,13 +38,19 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         setTargetEmail(emailToUse);
 
         try {
+            // 3. Attempt Activation (Auto-create with random password or Auto-login)
             const response = await onActivate(emailToUse);
+            
             if (response.result === 'confirmation_required') {
                 setStatus('confirmation');
             } else if (response.result === 'existing_user') {
                 setStatus('existing_user');
             } else {
                 setStatus('success');
+                // Redirect handled by parent usually, but we show success briefly
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
             }
         } catch (err: any) {
             console.error("Activation error:", err);
@@ -59,6 +63,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
+
+  // --- UI STATES ---
 
   if (status === 'error') {
       return (
@@ -86,10 +92,9 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  </div>
                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-                    We've sent a verification link to <strong>{targetEmail}</strong>.
+                    We've sent a confirmation link to <strong>{targetEmail}</strong>.
                     <br/><br/>
                     Please click the link to activate your unlimited access.
-                    <br/><span className="text-xs text-slate-400 mt-2 block">(Check your spam folder if you don't see it)</span>
                  </p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return to Login
@@ -108,43 +113,54 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  </div>
                  <h2 className="text-2xl font-bold text-slate-900 mb-2">Account Exists</h2>
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-                    Your payment was successful!
+                    Payment received! <br/>
+                    We found an existing account for <strong>{targetEmail}</strong>.
                     <br/><br/>
-                    We see you already have an account associated with <strong>{targetEmail}</strong>. 
-                    <br/>Please <strong>log in</strong> to automatically activate your Pro features.
+                    Please log in to access your Pro features.
                  </p>
                  <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
-                     Log In to Activate Pro <ArrowRight size={16} />
+                     Log In <ArrowRight size={16} />
                  </a>
              </div>
         </div>
       );
   }
 
+  // SUCCESS or LOADING state
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-fade-in-up">
       <div className="bg-white p-10 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm w-full border border-slate-200">
         
-        {/* Animated Success/Loading State */}
-        <div className="relative mb-6">
-            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
-            <div className="relative bg-white p-2 rounded-full shadow-sm z-10">
-                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-inner">
+        {status === 'success' ? (
+            <div className="relative mb-6">
+                 <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg">
                     <Check size={32} strokeWidth={3} />
                 </div>
             </div>
-        </div>
+        ) : (
+            <div className="relative mb-6">
+                <div className="absolute inset-0 bg-indigo-100 rounded-full animate-ping opacity-75"></div>
+                <div className="relative bg-white p-2 rounded-full shadow-sm z-10">
+                    <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-inner">
+                        <Loader2 size={32} className="animate-spin" />
+                    </div>
+                </div>
+            </div>
+        )}
 
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            {status === 'success' ? 'All Set!' : 'Setting up your account...'}
+        </h2>
         
-        <div className="flex items-center justify-center gap-3 text-indigo-600 font-medium bg-indigo-50 px-4 py-2 rounded-full mb-2">
-            <Loader2 className="animate-spin" size={18} />
-            <span>Finalizing your account...</span>
-        </div>
-        
-        <p className="text-slate-400 text-sm mt-4">
-            Please wait while we unlock your unlimited access.
-        </p>
+        {status === 'success' ? (
+            <p className="text-slate-500 text-sm mb-4">
+                Redirecting you to the dashboard...
+            </p>
+        ) : (
+            <p className="text-slate-400 text-sm mt-2">
+                Please wait a moment while we verify your payment and activate Pro features.
+            </p>
+        )}
       </div>
     </div>
   );
