@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 10
+// Force refresh: 11
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -337,7 +337,7 @@ const App: React.FC = () => {
   // --- REFACTORED ACTIVATION LOGIC ---
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       if (isSupabaseConfigured() && supabase) {
-          // 1. Check if we already have a session
+          // 1. Check if we already have a session (maybe user was logged in already)
           const { data: sessionData } = await supabase.auth.getSession();
           if (sessionData.session) {
                // Logged in already. Update status.
@@ -377,22 +377,24 @@ const App: React.FC = () => {
             }
           });
 
+          // Success handling
           if (data.user) {
-              const { error: upsertError } = await supabase.from('users').upsert({ 
-                id: data.user.id, 
-                email: email,
-                status: 'active',
-                plan: 'pro'
-              });
-              
-              if (upsertError) console.error("Upsert failed but continuing:", upsertError);
-
+              // If session is immediate (shouldn't happen with confirm enabled, but good safety)
               if (data.session) {
+                  const { error: upsertError } = await supabase.from('users').upsert({ 
+                    id: data.user.id, 
+                    email: email,
+                    status: 'active',
+                    plan: 'pro'
+                  });
+                  
+                  if (upsertError) console.error("Upsert failed but continuing:", upsertError);
                   await fetchUserProfile(data.user.id, email);
                   localStorage.removeItem('pendingUpgradeEmail'); 
                   setCurrentView('landing');
                   return { result: 'success' };
               } else {
+                   // User created but email confirmation required
                    return { result: 'confirmation_required' };
               }
           }
@@ -405,15 +407,26 @@ const App: React.FC = () => {
                 error.message.toLowerCase().includes('security purposes');
 
               const isAlreadyRegistered = 
-                error.message.includes('already registered') || 
+                error.message.toLowerCase().includes('already registered') || 
                 error.status === 400 || 
                 error.status === 422;
 
               if (isAlreadyRegistered) {
-                   await supabase.auth.resend({
+                   // Try to resend verification email if account exists but unverified
+                   const { error: resendError } = await supabase.auth.resend({
                        type: 'signup',
-                       email: email
-                   }).catch(() => {});
+                       email: email,
+                       options: { emailRedirectTo: window.location.origin }
+                   });
+                   
+                   if (resendError) {
+                       console.warn("Resend failed:", resendError.message);
+                       // If we hit rate limit on resend, we just assume previous email is fine and tell user to check.
+                       if (resendError.message.toLowerCase().includes('rate limit') || resendError.status === 429) {
+                            return { result: 'confirmation_required' };
+                       }
+                   }
+
                    return { result: 'existing_user' };
               }
 

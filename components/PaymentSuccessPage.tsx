@@ -110,7 +110,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <p className="text-slate-500 mb-6 text-sm leading-relaxed">
                     Your payment was successful!
                     <br/><br/>
-                    We see you already have an account. Please <strong>log in</strong> now to automatically activate your Pro features.
+                    We see you already have an account associated with <strong>{targetEmail}</strong>. 
+                    <br/>Please <strong>log in</strong> to automatically activate your Pro features.
                  </p>
                  <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Log In to Activate Pro <ArrowRight size={16} />
