@@ -11,7 +11,7 @@ import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 12
+// Force refresh: 13
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -58,12 +58,14 @@ const App: React.FC = () => {
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       const client = supabase;
       if (!client) return;
+      // Capture client in local scope for async safety
+      const dbClient = client;
 
       try {
           // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
           const [authResponse, dbResponse] = await Promise.all([
-              client.auth.getUser(),
-              client.from('users').select('*').eq('id', userId).maybeSingle()
+              dbClient.auth.getUser(),
+              dbClient.from('users').select('*').eq('id', userId).maybeSingle()
           ]);
 
           const authUser = authResponse.data.user;
@@ -83,7 +85,7 @@ const App: React.FC = () => {
               plan = 'pro';
               
               // Heal the DB record now that we have a confirmed session
-              await client.from('users').upsert({ 
+              await dbClient.from('users').upsert({ 
                   id: userId,
                   email: email,
                   status: 'active',
@@ -132,16 +134,19 @@ const App: React.FC = () => {
 
     // 3. Check Auth: Supabase OR LocalStorage
     const client = supabase;
-    if (isSupabaseConfigured() && client) {
+    if (client) {
         // REAL MODE: Check Supabase Session
-        client.auth.getSession().then(async ({ data: { session } }) => {
+        // Use a locally scoped variable 'authClient' to guarantee non-null type in closures
+        const authClient = client;
+        
+        authClient.auth.getSession().then(async ({ data: { session } }) => {
             if (session) {
                 await fetchUserProfile(session.user.id, session.user.email || '');
             }
         });
         
         // Listen for changes
-        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+        const { data: { subscription } } = authClient.auth.onAuthStateChange(async (event, session) => {
             if (!session) {
                 setUser(null);
             } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -155,11 +160,11 @@ const App: React.FC = () => {
                      if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
                          console.log("Applying pending upgrade for logged in user...");
                          // Update Metadata
-                         await client.auth.updateUser({
+                         await authClient.auth.updateUser({
                              data: { status: 'active', plan: 'pro' }
                          });
                          // Update DB
-                         await client.from('users').upsert({
+                         await authClient.from('users').upsert({
                              id: session.user.id,
                              email: sessionEmail,
                              status: 'active',
@@ -273,7 +278,7 @@ const App: React.FC = () => {
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
       const client = supabase;
-      if (user && isSupabaseConfigured() && client) {
+      if (user && client) {
           const dbResponse = await client.from('quotes').insert({
               user_id: user.id,
               industry: industry,
@@ -295,7 +300,7 @@ const App: React.FC = () => {
 
   const handleAuth = async (email: string, password?: string) => {
       const client = supabase;
-      if (isSupabaseConfigured() && client && password) {
+      if (client && password) {
           const { error } = await client.auth.signInWithPassword({ email, password });
           if (error) throw error;
           setCurrentView('landing');
@@ -324,7 +329,7 @@ const App: React.FC = () => {
 
   const handleResetPassword = async (email: string) => {
       const client = supabase;
-      if (isSupabaseConfigured() && client) {
+      if (client) {
           const { error } = await client.auth.resetPasswordForEmail(email, {
               redirectTo: window.location.origin,
           });
@@ -334,7 +339,7 @@ const App: React.FC = () => {
 
   const handleUpdatePassword = async (password: string) => {
       const client = supabase;
-      if (isSupabaseConfigured() && client) {
+      if (client) {
           const { error } = await client.auth.updateUser({ password: password });
           if (error) throw error;
       }
@@ -343,15 +348,18 @@ const App: React.FC = () => {
   // --- REFACTORED ACTIVATION LOGIC ---
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       const client = supabase;
-      if (isSupabaseConfigured() && client) {
+      if (client) {
+          // Scope client for type safety
+          const authClient = client;
+
           // 1. Check if we already have a session (maybe user was logged in already)
-          const { data: sessionData } = await client.auth.getSession();
+          const { data: sessionData } = await authClient.auth.getSession();
           if (sessionData.session) {
                // Logged in already. Update status.
-               await client.auth.updateUser({
+               await authClient.auth.updateUser({
                     data: { status: 'active', plan: 'pro' }
                });
-               const { error } = await client
+               const { error } = await authClient
                 .from('users')
                 .upsert({ 
                     id: sessionData.session.user.id,
@@ -373,7 +381,7 @@ const App: React.FC = () => {
           
           localStorage.setItem('pendingUpgradeEmail', email);
 
-          const { data, error } = await client.auth.signUp({ 
+          const { data, error } = await authClient.auth.signUp({ 
             email, 
             password: tempPassword,
             options: {
@@ -388,7 +396,7 @@ const App: React.FC = () => {
           if (data.user) {
               // If session is immediate (shouldn't happen with confirm enabled, but good safety)
               if (data.session) {
-                  const { error: upsertError } = await client.from('users').upsert({ 
+                  const { error: upsertError } = await authClient.from('users').upsert({ 
                     id: data.user.id, 
                     email: email,
                     status: 'active',
@@ -420,7 +428,7 @@ const App: React.FC = () => {
 
               if (isAlreadyRegistered) {
                    // Try to resend verification email if account exists but unverified
-                   const { error: resendError } = await client.auth.resend({
+                   const { error: resendError } = await authClient.auth.resend({
                        type: 'signup',
                        email: email,
                        options: { emailRedirectTo: window.location.origin }
@@ -470,7 +478,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
       const client = supabase;
-      if (isSupabaseConfigured() && client) {
+      if (client) {
           await client.auth.signOut();
       }
       setUser(null);
@@ -481,7 +489,7 @@ const App: React.FC = () => {
   const handleUpdateUser = async (updatedUser: User) => {
       setUser(updatedUser);
       const client = supabase;
-      if (isSupabaseConfigured() && client && user?.id) {
+      if (client && user?.id) {
           await client.from('users').update({
                 company_name: updatedUser.companyName,
                 company_phone: updatedUser.companyPhone,
