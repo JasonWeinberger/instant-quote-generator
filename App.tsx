@@ -10,9 +10,9 @@ import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
+import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Hammer, Wrench, Check } from 'lucide-react';
 
-// Force refresh: 14
+// Force refresh: 16 - Fixed TS18047
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -58,8 +58,8 @@ const App: React.FC = () => {
   // Memoize fetchUserProfile to use in other callbacks
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       if (!supabase) return;
-      // Capture client in local scope with explicit type cast to guarantee non-null in async closures
-      const client = supabase as SupabaseClient;
+      // Capture client in local scope with non-null assertion to guarantee type in async closures
+      const client = supabase!;
 
       try {
           // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
@@ -133,55 +133,7 @@ const App: React.FC = () => {
     }
 
     // 3. Check Auth: Supabase OR LocalStorage
-    if (supabase) {
-        // REAL MODE: Check Supabase Session
-        const client = supabase as SupabaseClient;
-        
-        client.auth.getSession().then(async ({ data: { session } }) => {
-            if (session) {
-                await fetchUserProfile(session.user.id, session.user.email || '');
-            }
-        });
-        
-        // Listen for changes
-        const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-            if (!session) {
-                setUser(null);
-            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-                 // CRITICAL FIX for "Existing Users":
-                 // If the user just paid (based on localStorage flag) and logs in (or clicks magic link),
-                 // force update their status to 'active'.
-                 if (session) {
-                     const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
-                     const sessionEmail = session.user.email;
-                     
-                     if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
-                         console.log("Applying pending upgrade for logged in user...");
-                         // Update Metadata
-                         await client.auth.updateUser({
-                             data: { status: 'active', plan: 'pro' }
-                         });
-                         // Update DB
-                         await client.from('users').upsert({
-                             id: session.user.id,
-                             email: sessionEmail,
-                             status: 'active',
-                             plan: 'pro',
-                             updated_at: new Date().toISOString()
-                         });
-                         // Clear flag
-                         localStorage.removeItem('pendingUpgradeEmail');
-                     }
-
-                     await fetchUserProfile(session.user.id, session.user.email || '');
-                 }
-            } else if (event === 'PASSWORD_RECOVERY') {
-                 setCurrentView('billing'); 
-            }
-        });
-        return () => subscription.unsubscribe();
-
-    } else {
+    if (!isSupabaseConfigured() || !supabase) {
         // DEMO MODE: Local Storage
         const storedUser = localStorage.getItem('quoteGenUser');
         if (storedUser) {
@@ -193,7 +145,56 @@ const App: React.FC = () => {
                 console.error("Failed to parse user", e);
             }
         }
+        return;
     }
+
+    // REAL MODE: Check Supabase Session
+    // At this point we *know* supabase is not null.
+    const client = supabase!;
+
+    client.auth.getSession().then(async ({ data: { session } }) => {
+        if (session) {
+            await fetchUserProfile(session.user.id, session.user.email || '');
+        }
+    });
+    
+    // Listen for changes
+    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+        if (!session) {
+            setUser(null);
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+             // CRITICAL FIX for "Existing Users":
+             // If the user just paid (based on localStorage flag) and logs in (or clicks magic link),
+             // force update their status to 'active'.
+             if (session) {
+                 const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
+                 const sessionEmail = session.user.email;
+                 
+                 if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
+                     console.log("Applying pending upgrade for logged in user...");
+                     // Update Metadata
+                     await client.auth.updateUser({
+                         data: { status: 'active', plan: 'pro' }
+                     });
+                     // Update DB
+                     await client.from('users').upsert({
+                         id: session.user.id,
+                         email: sessionEmail,
+                         status: 'active',
+                         plan: 'pro',
+                         updated_at: new Date().toISOString()
+                     });
+                     // Clear flag
+                     localStorage.removeItem('pendingUpgradeEmail');
+                 }
+
+                 await fetchUserProfile(session.user.id, session.user.email || '');
+             }
+        } else if (event === 'PASSWORD_RECOVERY') {
+             setCurrentView('billing'); 
+        }
+    });
+    return () => subscription.unsubscribe();
   }, [fetchUserProfile]);
 
   // Check for Payment Success URL Param
@@ -276,7 +277,7 @@ const App: React.FC = () => {
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
       if (user && supabase) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           const dbResponse = await client.from('quotes').insert({
               user_id: user.id,
               industry: industry,
@@ -298,7 +299,7 @@ const App: React.FC = () => {
 
   const handleAuth = async (email: string, password?: string) => {
       if (supabase && password) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           const { error } = await client.auth.signInWithPassword({ email, password });
           if (error) throw error;
           setCurrentView('landing');
@@ -327,7 +328,7 @@ const App: React.FC = () => {
 
   const handleResetPassword = async (email: string) => {
       if (supabase) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           const { error } = await client.auth.resetPasswordForEmail(email, {
               redirectTo: window.location.origin,
           });
@@ -337,7 +338,7 @@ const App: React.FC = () => {
 
   const handleUpdatePassword = async (password: string) => {
       if (supabase) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           const { error } = await client.auth.updateUser({ password: password });
           if (error) throw error;
       }
@@ -346,8 +347,8 @@ const App: React.FC = () => {
   // --- REFACTORED ACTIVATION LOGIC ---
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       if (supabase) {
-          // Scope client for type safety with explicit cast
-          const client = supabase as SupabaseClient;
+          // Scope client for type safety with non-null assertion
+          const client = supabase!;
 
           // 1. Check if we already have a session (maybe user was logged in already)
           const { data: sessionData } = await client.auth.getSession();
@@ -475,7 +476,7 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
       if (supabase) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           await client.auth.signOut();
       }
       setUser(null);
@@ -486,7 +487,7 @@ const App: React.FC = () => {
   const handleUpdateUser = async (updatedUser: User) => {
       setUser(updatedUser);
       if (supabase && user?.id) {
-          const client = supabase as SupabaseClient;
+          const client = supabase!;
           await client.from('users').update({
                 company_name: updatedUser.companyName,
                 company_phone: updatedUser.companyPhone,
