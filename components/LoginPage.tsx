@@ -224,7 +224,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
             <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-sm text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed bg-white text-slate-900 border-slate-300 hover:bg-slate-50`}
+                className={`w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-md text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-all disabled:opacity-70 disabled:cursor-not-allowed`}
             >
                 {isLoading ? 'Processing...' : (
                     authMode === 'signin' ? 'Log In' : 'Send Reset Link'
@@ -256,27 +256,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         </div>
         
         <div className="relative z-10">
-            <h3 className="text-3xl font-bold text-white mb-6">Professional estimates in seconds, not hours.</h3>
-            <ul className="space-y-4 text-slate-300">
+            <h3 className="text-4xl font-bold text-white mb-6 leading-tight">
+                Estimate smarter, build faster.
+            </h3>
+            <ul className="space-y-5 text-slate-200">
                 {[
-                    "Cloud History Sync",
-                    "Custom Logo & Branding",
+                    "Create professional quotes in seconds",
+                    "Local pricing for every US zip code",
+                    "Unlimited history and PDF exports",
+                    "Win more jobs with professional docs"
                 ].map((item, i) => (
                     <li key={i} className="flex items-center gap-3">
-                        <div className="bg-indigo-500/20 p-1 rounded-full">
-                            <Check size={16} className="text-indigo-400" />
+                        <div className="bg-indigo-600 rounded-full p-1.5 shadow-lg shadow-indigo-900/50">
+                            <Check size={14} className="text-white" strokeWidth={3} />
                         </div>
-                        {item}
+                        <span className="font-medium">{item}</span>
                     </li>
                 ))}
             </ul>
-        </div>
-
-        <div className="relative z-10 mt-auto">
-            <div className="flex items-center gap-2 text-slate-500 text-xs">
-                <Shield size={12} />
-                <span>256-bit SSL Encrypted • GDPR Compliant</span>
-            </div>
         </div>
 
       </div>

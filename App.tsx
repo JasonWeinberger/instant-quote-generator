@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { generateQuote } from './services/geminiService';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Industry, QuoteResult, HistoryItem, User } from './shared-types';
@@ -7,10 +7,11 @@ import { QuoteResultCard } from './components/QuoteResultCard';
 import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
+import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Check, Hammer, Wrench } from 'lucide-react';
 
-// Force refresh: 3
+// Force refresh: 6
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success';
@@ -45,10 +46,51 @@ const App: React.FC = () => {
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
+  
+  // NEW: Email Capture State
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   const resultRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
+
+  // Memoize fetchUserProfile to use in other callbacks
+  const fetchUserProfile = useCallback(async (userId: string, email: string) => {
+      if (!supabase) return;
+
+      try {
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (data) {
+              const u: User = {
+                  id: data.id,
+                  email: data.email || email,
+                  plan: 'pro', 
+                  status: data.status || 'trial',
+                  trialStartDate: new Date(data.created_at).getTime(),
+                  companyName: data.company_name,
+                  companyPhone: data.company_phone,
+                  companyAddress: data.company_address
+              };
+              setUser(u);
+          } else {
+              const newUser: User = {
+                  id: userId,
+                  email: email,
+                  plan: 'starter',
+                  status: 'trial',
+                  trialStartDate: Date.now()
+              };
+              setUser(newUser);
+          }
+      } catch (err) {
+          console.error("Unexpected error fetching profile:", err);
+      }
+  }, []);
 
   // Initialize
   useEffect(() => {
@@ -81,14 +123,12 @@ const App: React.FC = () => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!session) {
                 setUser(null);
-            } else if (event === 'SIGNED_IN') {
-                 // Explicitly handle sign-in redirect if needed, or just state update
-                 // If coming from email link, session is now active
-                 if (session && (!user || user.id !== session.user.id)) {
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                 // ALWAYS fetch profile on sign-in or refresh to ensure we have the latest DB status
+                 if (session) {
                     await fetchUserProfile(session.user.id, session.user.email || '');
                  }
             } else if (event === 'PASSWORD_RECOVERY') {
-                 // When user clicks reset link, they are signed in. Redirect to settings to change password.
                  setCurrentView('billing'); 
             }
         });
@@ -100,7 +140,6 @@ const App: React.FC = () => {
         if (storedUser) {
             try {
                 const parsedUser: User = JSON.parse(storedUser);
-                // Legacy fix: Ensure ID exists
                 if (!parsedUser.id) parsedUser.id = 'local_' + Date.now();
                 setUser(parsedUser);
             } catch (e) {
@@ -108,57 +147,17 @@ const App: React.FC = () => {
             }
         }
     }
-  }, []);
+  }, [fetchUserProfile]);
 
-  // Check for Payment Success URL Param (Supports both 'payment_success' and 'success')
+  // Check for Payment Success URL Param
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // We prioritize 'success' as per the new instruction, but keep 'payment_success' for backward compat if needed
     if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
         setCurrentView('payment_success');
-        // Clean URL so a refresh doesn't trigger it again
+        // Clean URL without refresh
         window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
-
-  const fetchUserProfile = async (userId: string, email: string) => {
-      if (!supabase) return;
-
-      try {
-          // Fetch profile from 'users' table
-          const { data } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-
-          if (data) {
-              const u: User = {
-                  id: data.id,
-                  email: data.email || email,
-                  plan: 'pro', // Assumed pro structure for now
-                  status: data.status || 'trial',
-                  trialStartDate: new Date(data.created_at).getTime(),
-                  companyName: data.company_name,
-                  companyPhone: data.company_phone,
-                  companyAddress: data.company_address
-              };
-              setUser(u);
-          } else {
-              // If no profile exists (new signup without trigger), create a default local state
-              const newUser: User = {
-                  id: userId,
-                  email: email,
-                  plan: 'starter',
-                  status: 'trial',
-                  trialStartDate: Date.now()
-              };
-              setUser(newUser);
-          }
-      } catch (err) {
-          console.error("Unexpected error fetching profile:", err);
-      }
-  };
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -166,20 +165,27 @@ const App: React.FC = () => {
     }
   }, [result]);
 
-  // --- LOGIC GATES ---
-  // Limit reached if: User is NOT active AND usage >= limit
   const isLimitReached = (user?.status !== 'active') && (usageCount >= MAX_FREE_QUOTES);
   const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
-  // Handlers
-  const goToCheckout = () => {
-    // REAL PRODUCTION MODE: Redirect to Stripe immediately
-    window.open(STRIPE_LINKS.monthly, '_blank');
+  // --- MODIFIED UPGRADE FLOW ---
+  const handleUpgradeClick = () => {
+      // Step 1: Open Modal to capture email first
+      setShowEmailModal(true);
+  };
+
+  const handleEmailSubmit = (email: string) => {
+      // Step 2: Save email pending upgrade
+      localStorage.setItem('pendingUpgradeEmail', email);
+      setShowEmailModal(false);
+      
+      // Step 3: Redirect to Stripe
+      window.open(STRIPE_LINKS.monthly, '_blank');
   };
 
   const handleGenerateClick = async () => {
     if (isLimitReached) {
-        goToCheckout();
+        handleUpgradeClick(); // Changed from direct checkout
         return;
     }
     
@@ -203,14 +209,12 @@ const App: React.FC = () => {
     try {
       const quoteData = await generateQuote(industry, jobDescription, zipCode);
       
-      // Increment Usage for non-active users
       if (user?.status !== 'active') {
           const newCount = usageCount + 1;
           setUsageCount(newCount);
           localStorage.setItem('quoteUsageCount', newCount.toString());
       }
       
-      // Save History
       const newHistoryItem: HistoryItem = {
         ...quoteData,
         id: Date.now().toString(),
@@ -224,7 +228,6 @@ const App: React.FC = () => {
       setHistory(updatedHistory);
       localStorage.setItem('quoteHistory', JSON.stringify(updatedHistory));
       
-      // Real DB Insert - USING RESPONSE OBJECT TO AVOID TS6133
       if (user && isSupabaseConfigured() && supabase) {
           const dbResponse = await supabase.from('quotes').insert({
               user_id: user.id,
@@ -233,10 +236,7 @@ const App: React.FC = () => {
               zip_code: zipCode,
               result: quoteData
           });
-          
-          if (dbResponse.error) {
-            console.warn("Failed to save quote to database:", dbResponse.error.message);
-          }
+          if (dbResponse.error) console.warn("Failed to save quote:", dbResponse.error.message);
       }
 
       setResult(quoteData);
@@ -250,25 +250,14 @@ const App: React.FC = () => {
 
   const handleAuth = async (email: string, password?: string, isSignUp?: boolean) => {
       if (isSupabaseConfigured() && supabase && password) {
-          if (isSignUp) {
-              // DEPRECATED in favor of Payment First flow, but kept for robustness
-              const { data, error } = await supabase.auth.signUp({ 
-                email, 
-                password
-              });
-              if (error) throw error;
-              if (data.user && !data.session) return { requiresConfirmation: true };
-          } else {
-              const { error } = await supabase.auth.signInWithPassword({ email, password });
-              if (error) throw error;
-          }
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) throw error;
           setCurrentView('landing');
       } else {
           // DEMO/LOCAL AUTH
           await new Promise(resolve => setTimeout(resolve, 1000));
           const existingUserStr = localStorage.getItem(`user_${email}`);
           let userData: User;
-
           if (existingUserStr) {
               userData = JSON.parse(existingUserStr);
           } else {
@@ -281,7 +270,6 @@ const App: React.FC = () => {
               };
               localStorage.setItem(`user_${email}`, JSON.stringify(userData));
           }
-          
           setUser(userData);
           localStorage.setItem('quoteGenUser', JSON.stringify(userData));
           setCurrentView('landing');
@@ -294,10 +282,6 @@ const App: React.FC = () => {
               redirectTo: window.location.origin,
           });
           if (error) throw error;
-      } else {
-          // DEMO
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          console.log(`Password reset requested for ${email}`);
       }
   };
 
@@ -305,67 +289,91 @@ const App: React.FC = () => {
       if (isSupabaseConfigured() && supabase) {
           const { error } = await supabase.auth.updateUser({ password: password });
           if (error) throw error;
-      } else {
-          await new Promise(resolve => setTimeout(resolve, 1000));
       }
   };
 
-  const handlePaymentSuccessActivation = async (email?: string, password?: string) => {
+  // --- REFACTORED ACTIVATION LOGIC ---
+  // Only requires email. Generates random password for zero-friction setup.
+  // Wrapped in useCallback to prevent infinite loop in PaymentSuccessPage
+  const handlePaymentSuccessActivation = useCallback(async (email: string) => {
       if (isSupabaseConfigured() && supabase) {
-          let userId = user?.id;
+          // 1. Check if we already have a session
+          const { data: sessionData } = await supabase.auth.getSession();
+          if (sessionData.session) {
+               // Logged in already. Just update status.
+               const { error } = await supabase
+                .from('users')
+                .update({ status: 'active', plan: 'pro' })
+                .eq('id', sessionData.session.user.id);
+               
+               if (error) throw error;
+               
+               await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+               setCurrentView('landing');
+               return;
+          }
 
-          // 1. If not logged in, try to Authenticate (Sign Up or Sign In)
-          if (!userId && email && password) {
-              // Attempt Sign Up first (Assumption: New user coming from Stripe)
-              const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ 
-                email, 
-                password 
+          // 2. Not logged in. Create new account with random password.
+          // We do this to "Auto-Activate" without forcing user to pick a password now.
+          const tempPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+          
+          const { data, error } = await supabase.auth.signUp({ 
+            email, 
+            password: tempPassword,
+            options: {
+                data: {
+                    status: 'active', 
+                    plan: 'pro'
+                }
+            }
+          });
+
+          if (data.user) {
+              // Success: New user created
+              // Upsert to ensure DB is in sync
+              const { error: upsertError } = await supabase.from('users').upsert({ 
+                id: data.user.id, 
+                email: email,
+                status: 'active',
+                plan: 'pro'
               });
+              
+              if (upsertError) console.error("Upsert failed but continuing:", upsertError);
 
-              if (signUpData.user && signUpData.session) {
-                  // Success: New user created and logged in
-                  userId = signUpData.user.id;
-              } else if (signUpData.user && !signUpData.session) {
-                  // User created but needs confirmation
-                  throw new Error("Account created! Please check your email to confirm, then log in.");
-              } else if (signUpError) {
-                  // If error indicates user exists, try logging in
-                  if (signUpError.message.toLowerCase().includes('already registered') || signUpError.status === 422 || signUpError.status === 400) {
-                       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-                       if (signInError) throw new Error("Account already exists, but password was incorrect.");
-                       if (signInData.user) userId = signInData.user.id;
-                  } else {
-                      throw signUpError;
-                  }
+              // If session exists (no email confirm needed), we are good.
+              // If session missing (email confirm needed), we still clear loading state but user needs to check email.
+              
+              if (data.session) {
+                  await fetchUserProfile(data.user.id, email);
+                  localStorage.removeItem('pendingUpgradeEmail'); // Clean up
+                  setCurrentView('landing');
+                  return;
+              } else {
+                   // If confirmation IS required by Supabase settings, we can't auto-login.
+                   // But we successfully "claimed" the account.
+                   throw new Error("Activation successful! Please check your email to sign in.");
               }
           }
 
-          if (!userId) throw new Error("Authentication failed. Please try again.");
+          if (error) {
+              // User likely exists. 
+              // Since we can't log them in without password, we have to ask them to login.
+              if (error.message.includes('already registered') || error.status === 400 || error.status === 422) {
+                   throw new Error("Account exists. Please Log In to activate.");
+              }
+              throw error;
+          }
 
-          // 2. Update User Status to Active in DB
-          const { error: updateError } = await supabase
-            .from('users')
-            .upsert({ 
-                id: userId, 
-                status: 'active',
-                email: email || user?.email
-            });
-             
-          if (updateError) throw updateError;
-
-          // 3. Refresh Profile state
-          await fetchUserProfile(userId, email || user?.email || '');
-          
       } else {
           // DEMO MODE MOCK
           if (user) {
             const updatedUser: User = { ...user, status: 'active' };
             setUser(updatedUser);
             localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
-          } else if (email) {
+          } else {
                const newUser: User = {
                   id: `local_paid_${Date.now()}`,
-                  email,
+                  email: email,
                   plan: 'pro',
                   status: 'active',
                   trialStartDate: Date.now()
@@ -373,13 +381,10 @@ const App: React.FC = () => {
               setUser(newUser);
               localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
           }
+          setShowPaywallModal(false);
+          setCurrentView('landing');
       }
-      
-      // 4. Cleanup and Redirect
-      localStorage.removeItem('pendingUpgrade'); // Clear the upgrade flag
-      setShowPaywallModal(false);
-      setCurrentView('landing');
-  };
+  }, [fetchUserProfile, user]);
 
   const handleLogout = async () => {
       if (isSupabaseConfigured() && supabase) {
@@ -392,27 +397,15 @@ const App: React.FC = () => {
 
   const handleUpdateUser = async (updatedUser: User) => {
       setUser(updatedUser);
-      
       if (isSupabaseConfigured() && supabase && user?.id) {
-          const { error } = await supabase
-            .from('users')
-            .update({
+          await supabase.from('users').update({
                 company_name: updatedUser.companyName,
                 company_phone: updatedUser.companyPhone,
                 company_address: updatedUser.companyAddress
-            })
-            .eq('id', user.id);
-          
-          if (error) console.error("Failed to update settings", error);
+            }).eq('id', user.id);
       } else {
          localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
-         localStorage.setItem(`user_${updatedUser.email}`, JSON.stringify(updatedUser));
       }
-  };
-
-  const handleUpgradeClick = () => {
-      // Direct to payment immediately
-      goToCheckout();
   };
 
   // View Router
@@ -451,6 +444,14 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       
+      {/* Email Capture Modal */}
+      <EmailCaptureModal 
+        isOpen={showEmailModal} 
+        onClose={() => setShowEmailModal(false)} 
+        onSubmit={handleEmailSubmit}
+        initialEmail={user?.email}
+      />
+
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -539,7 +540,7 @@ const App: React.FC = () => {
                 </p>
             </div>
             
-            {/* Input Area - IMPROVED UI */}
+            {/* Input Area */}
             <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
                 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
@@ -731,9 +732,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                  </div>
                  
                  <div className="bg-white text-slate-900 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/50 relative">
-                     <div className="absolute -top-4 right-10 bg-indigo-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide shadow-lg">
-                         Most Popular
-                     </div>
                      <h3 className="text-2xl font-bold text-slate-900 mb-2">Pro Plan</h3>
                      <div className="flex items-baseline gap-1 mb-6">
                          <span className="text-5xl font-extrabold tracking-tight">$29</span>

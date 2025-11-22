@@ -1,150 +1,106 @@
-import React, { useState, useEffect } from 'react';
-import { Check, Lock, ArrowRight, AlertCircle, Shield, Loader2 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Check, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email?: string, password?: string) => Promise<void>;
+  onActivate: (email: string) => Promise<void>;
 }
 
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [autoActivating, setAutoActivating] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Ref to track if activation has already been attempted.
+  // This prevents double-execution in React Strict Mode and race conditions.
+  const activationAttempted = useRef(false);
 
-  // Auto-activate if user session is present
   useEffect(() => {
-    if (user) {
-        setAutoActivating(true);
-        onActivate()
-            .catch(err => {
-                console.error(err);
-                setError("Failed to automatically activate. Please try signing in below.");
-                setAutoActivating(false);
-            });
-    }
-  }, [user]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
-      setIsLoading(false);
-      return;
+    // 1. Guard: Do not run activation if user is already active.
+    // This prevents re-running logic if the component re-renders with the updated user object.
+    if (user?.status === 'active') {
+        return;
     }
 
-    try {
-      await onActivate(email, password);
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to activate account. Please try again.");
-      setIsLoading(false);
-    }
-  };
+    const activateAccount = async () => {
+        // Prevent multiple calls
+        if (activationAttempted.current) return;
+        activationAttempted.current = true;
 
-  if (autoActivating) {
+        // 1. Get email from local storage (set before Stripe redirect)
+        const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
+        
+        // 2. Fallback: If user is already logged in (e.g. upgrading from free), use that email.
+        // NOTE: Since the dependency array is empty [], 'user' here refers to the value AT MOUNT.
+        // This is intentional to prevent the effect from re-running when 'user' updates.
+        const targetEmail = pendingEmail || user?.email;
+
+        if (!targetEmail) {
+            setStatus('error');
+            setErrorMessage("Could not find account details. Please contact support.");
+            return;
+        }
+
+        try {
+            await onActivate(targetEmail);
+            setStatus('success');
+            // onActivate in App.tsx typically handles the redirect, 
+            // but we set success state here just in case of delay.
+        } catch (err: any) {
+            console.error("Activation error:", err);
+            setStatus('error');
+            setErrorMessage(err.message || "Activation failed.");
+        }
+    };
+
+    activateAccount();
+    
+    // 2. EXPLICIT REQUIREMENT: Empty dependency array.
+    // This ensures the logic runs exactly ONCE on mount, regardless of prop changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  if (status === 'error') {
       return (
-        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-fade-in-up">
-            <div className="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm w-full">
-                <Loader2 className="animate-spin text-indigo-600 mb-4" size={48} />
-                <h2 className="text-xl font-bold text-slate-900">Finalizing Account...</h2>
-                <p className="text-slate-500 mt-2">Confirming your payment and unlocking unlimited access.</p>
-            </div>
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
+                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600">
+                     <AlertCircle size={32} />
+                 </div>
+                 <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
+                 <p className="text-slate-500 mb-6">{errorMessage}</p>
+                 <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                     Return Home
+                 </a>
+             </div>
         </div>
       );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-fade-in-up">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="bg-green-600 p-8 text-center relative overflow-hidden">
-             <div className="absolute inset-0 opacity-10">
-                  <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" />
-                  </svg>
-             </div>
-             <div className="relative z-10">
-                 <div className="w-16 h-16 bg-white text-green-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+      <div className="bg-white p-10 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm w-full border border-slate-200">
+        
+        {/* Animated Success/Loading State */}
+        <div className="relative mb-6">
+            <div className="absolute inset-0 bg-green-100 rounded-full animate-ping opacity-75"></div>
+            <div className="relative bg-white p-2 rounded-full shadow-sm z-10">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-inner">
                     <Check size={32} strokeWidth={3} />
-                 </div>
-                 <h2 className="text-2xl font-bold text-white">Payment Received!</h2>
-                 <p className="text-green-100 mt-2 text-sm font-medium">
-                    Your transaction was successful.
-                 </p>
-             </div>
-        </div>
-
-        <div className="p-8">
-          <div className="mb-6 text-center">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Set Up Your Pro Account</h3>
-              <div className="bg-red-50 border border-red-100 text-red-800 p-4 rounded-lg text-xs text-left mb-4 flex gap-3 items-start shadow-sm">
-                  <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-600" />
-                  <div>
-                      <p className="font-bold text-red-900 mb-1">IMPORTANT: Do Not Close This Tab</p>
-                      <p>You must create your login details below to finish activating your unlimited access. If you close this page, you may need to contact support.</p>
-                  </div>
-              </div>
-              <p className="text-slate-500 text-sm">
-                  Create your login credentials below to <span className="text-indigo-600 font-bold">activate your unlimited access</span> immediately.
-              </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-medium"
-                placeholder="Enter your email"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Choose Password</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock size={18} className="text-slate-400" />
                 </div>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-medium"
-                  placeholder="••••••••"
-                />
-              </div>
             </div>
-
-            {error && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
-                <AlertCircle size={16} /> {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-4 px-4 border border-transparent rounded-xl shadow-lg shadow-indigo-200 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-70 transform hover:-translate-y-0.5"
-            >
-              {isLoading ? 'Activating...' : 'Create Account & Unlock'} <ArrowRight size={16} />
-            </button>
-            
-            <div className="flex items-center justify-center gap-2 text-xs text-slate-400 mt-4">
-                <Shield size={12} />
-                <span>Secure Verification</span>
-            </div>
-          </form>
         </div>
+
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Payment Successful!</h2>
+        
+        <div className="flex items-center justify-center gap-3 text-indigo-600 font-medium bg-indigo-50 px-4 py-2 rounded-full mb-2">
+            <Loader2 className="animate-spin" size={18} />
+            <span>Finalizing your account...</span>
+        </div>
+        
+        <p className="text-slate-400 text-sm mt-4">
+            Please wait while we unlock your unlimited access.
+        </p>
       </div>
     </div>
   );
