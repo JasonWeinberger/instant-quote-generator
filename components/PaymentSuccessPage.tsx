@@ -13,22 +13,30 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const [targetEmail, setTargetEmail] = useState<string>('');
   const [showManualButton, setShowManualButton] = useState(false);
   
-  // Ref to track if activation has already been attempted to prevent double-firing
   const activationAttempted = useRef(false);
 
-  // Safety: Show manual button if things take more than 3 seconds
+  // 1. NUCLEAR OPTION: Unconditional Redirect Timer
+  // If for ANY reason (network error, logic bug, cosmic rays) the user is still here 
+  // after 5 seconds, we force them to the dashboard.
   useEffect(() => {
-      const timer = setTimeout(() => setShowManualButton(true), 3000);
-      return () => clearTimeout(timer);
+    const forceRedirectTimer = setTimeout(() => {
+      console.warn("Force redirect timeout triggered - sending to dashboard");
+      window.location.href = '/';
+    }, 5000);
+
+    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 2500);
+
+    return () => {
+      clearTimeout(forceRedirectTimer);
+      clearTimeout(manualButtonTimer);
+    };
   }, []);
 
   useEffect(() => {
-    // 1. Guard: Do not run activation if user is already active and logged in.
+    // 2. Guard: Do not run activation if user is already active and logged in.
     if (user?.status === 'active') {
         setStatus('success');
-        setTimeout(() => {
-            window.location.assign('/');
-        }, 1000);
+        setTimeout(() => window.location.href = '/', 1000);
         return;
     }
 
@@ -36,48 +44,43 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         if (activationAttempted.current) return;
         activationAttempted.current = true;
 
-        // 2. Get email from local storage (set before Stripe redirect)
         const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
         const emailToUse = pendingEmail || user?.email;
 
         if (!emailToUse) {
+            // If we can't find an email, we can't activate. 
+            // But the Force Redirect Timer above will still save the user eventually.
             setStatus('error');
-            setErrorMessage("Could not find account details. Please contact support.");
+            setErrorMessage("Could not find account details. Redirecting...");
             return;
         }
         setTargetEmail(emailToUse);
 
         try {
-            // 3. Attempt Activation
             const response = await onActivate(emailToUse);
             
             if (response.result === 'existing_user') {
                 setStatus('existing_user');
             } else {
-                // Default to success for any other outcome
                 setStatus('success');
-                // Auto-redirect after success
-                setTimeout(() => {
-                    window.location.assign('/');
-                }, 1500);
+                // Fast redirect on success
+                setTimeout(() => window.location.href = '/', 1000);
             }
         } catch (err: any) {
             console.error("Activation error:", err);
-            // Fallback to success so user can at least get to the app
+            // Even on error, show success and let the user in. 
+            // The backend state might be lagging but we shouldn't block access.
             setStatus('success');
-            setTimeout(() => {
-                window.location.assign('/');
-            }, 1500);
+            setTimeout(() => window.location.href = '/', 1000);
         }
     };
 
     activateAccount();
-    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
   const handleManualContinue = () => {
-      window.location.assign('/');
+      window.location.href = '/';
   };
 
   // --- UI STATES ---
@@ -90,7 +93,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                      <AlertCircle size={32} />
                  </div>
                  <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
-                 <p className="text-slate-500 mb-6">{errorMessage}</p>
+                 <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
                  <button onClick={handleManualContinue} className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
                  </button>
@@ -111,7 +114,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                     Payment received! <br/>
                     We found an existing account for <strong>{targetEmail}</strong>.
                     <br/><br/>
-                    Please log in to access your Pro features, or use "Forgot Password" if you need to set one.
+                    Please log in to access your Pro features.
                  </p>
                  <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Log In <ArrowRight size={16} />
@@ -144,7 +147,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         )}
 
         <h2 className="text-2xl font-bold text-slate-900 mb-2">
-            {status === 'success' ? 'Payment Successful!' : 'Finalizing your account...'}
+            {status === 'success' ? 'Payment Successful!' : 'Finalizing account...'}
         </h2>
         
         {status === 'success' ? (

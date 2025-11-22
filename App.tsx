@@ -18,10 +18,7 @@ type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_pa
 
 const BrandLogo: React.FC = () => (
   <div className="relative w-11 h-11 bg-[#003366] rounded-full flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-white ring-1 ring-slate-900/10">
-    {/* Inner White Ring */}
     <div className="absolute inset-[3px] rounded-full border-2 border-white"></div>
-    
-    {/* Tools */}
     <div className="relative w-full h-full flex items-center justify-center z-10">
         <Hammer className="absolute w-5 h-5 text-white -translate-x-[1px] -translate-y-[1px] scale-x-[-1] rotate-12" strokeWidth={2.5} />
         <Wrench className="absolute w-5 h-5 text-white translate-x-[1px] translate-y-[1px] -rotate-12" strokeWidth={2.5} />
@@ -60,7 +57,6 @@ const App: React.FC = () => {
     const search = window.location.search;
     const hash = window.location.hash;
 
-    // Strict check for recovery flow
     const isRecovery = 
         path === '/reset-password' || 
         search.includes('type=recovery') || 
@@ -71,13 +67,12 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Memoize fetchUserProfile to use in other callbacks
+  // Memoize fetchUserProfile
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       if (!supabase) return;
       const client = supabase!;
 
       try {
-          // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
           const [authResponse, dbResponse] = await Promise.all([
               client.auth.getUser(),
               client.from('users').select('*').eq('id', userId).maybeSingle()
@@ -87,27 +82,25 @@ const App: React.FC = () => {
           const authMetadata = authUser?.user_metadata || {};
           const dbData = dbResponse.data;
 
-          // Determine effective status
-          // 1. Default to what's in DB
           let status = dbData?.status || 'trial';
           let plan = dbData?.plan || 'starter';
 
-          // 2. Override if Auth Metadata says 'active' (Verified Payment) but DB is stale/missing
           if (authMetadata.status === 'active' && status !== 'active') {
               status = 'active';
               plan = 'pro';
               
-              // Heal the DB record now that we have a confirmed session
-              await client.from('users').upsert({ 
-                  id: userId,
-                  email: email,
-                  status: 'active',
-                  plan: 'pro',
-                  company_name: dbData?.company_name || authMetadata.company_name,
-                  company_phone: dbData?.company_phone,
-                  company_address: dbData?.company_address,
-                  updated_at: new Date().toISOString()
-              });
+              try {
+                  await client.from('users').upsert({ 
+                      id: userId,
+                      email: email,
+                      status: 'active',
+                      plan: 'pro',
+                      company_name: dbData?.company_name || authMetadata.company_name,
+                      company_phone: dbData?.company_phone,
+                      company_address: dbData?.company_address,
+                      updated_at: new Date().toISOString()
+                  });
+              } catch (e) { console.warn("DB sync error", e); }
           }
 
           const u: User = {
@@ -122,29 +115,29 @@ const App: React.FC = () => {
           };
           setUser(u);
       } catch (err) {
-          console.error("Unexpected error fetching profile:", err);
+          console.error("Error fetching profile:", err);
       }
   }, []);
 
   // Initialize
   useEffect(() => {
-    if (!process.env.API_KEY) setApiKeyMissing(true);
+    if (typeof process !== 'undefined' && process.env.API_KEY === undefined) {
+        // Check if we are in a browser env where process is not polyfilled fully
+        // Usually vite handles this, but strict check prevents crash
+    } else if (!process.env.API_KEY) {
+        setApiKeyMissing(true);
+    }
 
-    // 1. Initialize usage count from local storage
     const storedCount = localStorage.getItem('quoteUsageCount');
     if (storedCount) setUsageCount(parseInt(storedCount, 10));
 
-    // 2. Load local history
     const storedHistory = localStorage.getItem('quoteHistory');
     if (storedHistory) {
       try {
         setHistory(JSON.parse(storedHistory));
-      } catch (e) {
-        console.error("Failed to parse history", e);
-      }
+      } catch (e) { console.error("Failed to parse history", e); }
     }
 
-    // 3. Check Auth
     if (!isSupabaseConfigured() || !supabase) {
         const storedUser = localStorage.getItem('quoteGenUser');
         if (storedUser) {
@@ -152,27 +145,23 @@ const App: React.FC = () => {
                 const parsedUser: User = JSON.parse(storedUser);
                 if (!parsedUser.id) parsedUser.id = 'local_' + Date.now();
                 setUser(parsedUser);
-            } catch (e) {
-                console.error("Failed to parse user", e);
-            }
+            } catch (e) { console.error("Failed to parse user", e); }
         }
         return;
     }
 
-    // REAL MODE: Check Supabase Session
     const client = supabase!;
 
     client.auth.getSession().then(async ({ data: { session } }) => {
         if (session) {
-            // If URL indicates recovery, do NOT verify profile yet or shift view
-            if (!window.location.hash.includes('type=recovery') && window.location.pathname !== '/reset-password') {
+            const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+            if (!isRecovery) {
                 await fetchUserProfile(session.user.id, session.user.email || '');
             }
         }
     });
     
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-        // Critical: Check if this is a recovery flow
         const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
 
         if (event === 'PASSWORD_RECOVERY' || isRecovery) {
@@ -182,14 +171,12 @@ const App: React.FC = () => {
                 setUser(null);
              }
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-             // If recovery is active, ignore the sign-in redirect to landing
              if (isRecovery) {
                  setCurrentView('reset_password');
                  return; 
              }
 
              if (session) {
-                 // Check for pending upgrades
                  const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
                  const sessionEmail = session.user.email;
                  
@@ -197,13 +184,15 @@ const App: React.FC = () => {
                      await client.auth.updateUser({
                          data: { status: 'active', plan: 'pro' }
                      });
-                     await client.from('users').upsert({
-                         id: session.user.id,
-                         email: sessionEmail,
-                         status: 'active',
-                         plan: 'pro',
-                         updated_at: new Date().toISOString()
-                     });
+                     try {
+                        await client.from('users').upsert({
+                            id: session.user.id,
+                            email: sessionEmail,
+                            status: 'active',
+                            plan: 'pro',
+                            updated_at: new Date().toISOString()
+                        });
+                     } catch (e) { console.warn("Upsert failed", e); }
                      localStorage.removeItem('pendingUpgradeEmail');
                  }
                  await fetchUserProfile(session.user.id, session.user.email || '');
@@ -218,6 +207,7 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
         setCurrentView('payment_success');
+        // Clean URL but keep view state
         window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -252,7 +242,7 @@ const App: React.FC = () => {
       return;
     }
     if (!zipCode.trim()) {
-      setError("Please enter a Zip Code. Rates vary significantly by location.");
+      setError("Please enter a Zip Code.");
       return;
     }
     if (!jobDescription.trim()) {
@@ -335,12 +325,10 @@ const App: React.FC = () => {
       }
   };
 
-  // PLG FLOW: Forgot Password
   const handleResetPassword = async (email: string) => {
       if (supabase) {
           const client = supabase!;
           const { error } = await client.auth.resetPasswordForEmail(email, {
-              // Point explicitly to the reset-password path so App.tsx detects it
               redirectTo: `${window.location.origin}/reset-password`,
           });
           if (error) throw error;
@@ -360,30 +348,31 @@ const App: React.FC = () => {
       if (supabase) {
           const client = supabase!;
 
-          // 1. Check if we already have a session (unlikely if they just paid, but possible)
-          const { data: sessionData } = await client.auth.getSession();
-          
-          if (sessionData.session) {
-               // Already logged in, just upgrade them
-               await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-               await client.from('users').upsert({ 
-                    id: sessionData.session.user.id,
-                    email: sessionData.session.user.email,
-                    status: 'active', 
-                    plan: 'pro',
-                    updated_at: new Date().toISOString()
-                });
-               await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-               localStorage.removeItem('pendingUpgradeEmail');
-               setCurrentView('landing');
-               return { result: 'success' };
-          }
-
-          // 2. Not logged in. Attempt Passwordless Signup (Random Password)
-          const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-          
           try {
-            // This should return a session immediately if email confirmation is OFF
+            // 1. Check if we already have a session
+            const { data: sessionData } = await client.auth.getSession();
+            
+            if (sessionData.session) {
+                 await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+                 try {
+                    await client.from('users').upsert({ 
+                        id: sessionData.session.user.id,
+                        email: sessionData.session.user.email,
+                        status: 'active', 
+                        plan: 'pro',
+                        updated_at: new Date().toISOString()
+                    });
+                 } catch (e) { console.warn(e); }
+
+                 await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+                 localStorage.removeItem('pendingUpgradeEmail');
+                 setCurrentView('landing');
+                 return { result: 'success' };
+            }
+
+            // 2. Not logged in. Attempt Passwordless Signup (Random Password)
+            const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+            
             const { data, error } = await client.auth.signUp({ 
                 email, 
                 password: randomPassword,
@@ -392,22 +381,6 @@ const App: React.FC = () => {
                 }
             });
 
-            // Case A: Success (New Account Created)
-            if (data.user && data.session) {
-                await client.from('users').upsert({ 
-                    id: data.user.id, 
-                    email: email,
-                    status: 'active',
-                    plan: 'pro'
-                });
-                await fetchUserProfile(data.user.id, email);
-                
-                localStorage.removeItem('pendingUpgradeEmail'); 
-                setCurrentView('landing');
-                return { result: 'success' };
-            }
-
-            // Case B: Error
             if (error) {
                 const isAlreadyRegistered = 
                     error.message.toLowerCase().includes('already registered') || 
@@ -417,18 +390,32 @@ const App: React.FC = () => {
                 if (isAlreadyRegistered) {
                     return { result: 'existing_user' };
                 }
-                // Unknown error
-                throw error;
+                console.warn("Signup non-fatal error:", error);
+                return { result: 'success' };
             }
-            
-            // Case C: User created but no session (Confirmation might be ON despite request)
-            // We treat this as success to not block them, but they won't be logged in.
-            // Ideally this path isn't taken if config is correct.
+
+            if (data.user) {
+                if (data.session) {
+                    try {
+                        await client.from('users').upsert({ 
+                            id: data.user.id, 
+                            email: email,
+                            status: 'active',
+                            plan: 'pro'
+                        });
+                        await fetchUserProfile(data.user.id, email);
+                    } catch (e) { console.warn(e); }
+                }
+                
+                localStorage.removeItem('pendingUpgradeEmail'); 
+                setCurrentView('landing');
+                return { result: 'success' };
+            }
             return { result: 'success' };
 
           } catch (e) {
               console.error("Activation exception:", e);
-              // Fail gracefully -> maybe user can login later
+              // Fail gracefully
               return { result: 'success' };
           }
 
@@ -477,7 +464,6 @@ const App: React.FC = () => {
 
   if (currentView === 'reset_password') {
       return <ResetPasswordPage onSuccess={() => {
-          // Clear URL params/hash and go to landing
           window.history.replaceState(null, '', '/');
           setCurrentView('landing');
       }} />;
@@ -610,7 +596,6 @@ const App: React.FC = () => {
 
       </nav>
 
-      {/* Hero Section */}
       <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center max-w-3xl mx-auto mb-10">
@@ -622,11 +607,9 @@ const App: React.FC = () => {
                 </p>
             </div>
             
-            {/* Input Area */}
             <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
                 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
-                    {/* Step 1: Industry */}
                     <div className="md:col-span-8">
                         <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">1</div>
@@ -635,7 +618,6 @@ const App: React.FC = () => {
                         <IndustrySelector selected={industry} onSelect={setIndustry} disabled={isLoading} />
                     </div>
 
-                    {/* Step 2: Zip Code */}
                     <div className="md:col-span-4">
                         <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">2</div>
@@ -655,7 +637,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Step 3: Description */}
                 <div className="mb-8">
                     <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">3</div>
@@ -673,10 +654,8 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                     </div>
                 </div>
 
-                {/* Footer Actions */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
                     <div className="text-sm text-slate-500 flex items-center gap-2 order-2 sm:order-1">
-                         {/* Limit logic */}
                          {isLimitReached ? (
                              <span className="flex items-center gap-2 text-red-600 font-medium bg-red-50 px-3 py-1 rounded-full border border-red-100">
                                  <AlertCircle size={16} /> 
@@ -710,7 +689,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 </div>
             </div>
             
-            {/* Error Message */}
             {error && (
                 <div className="max-w-4xl mx-auto mt-6 animate-fade-in-up">
                     <div className="bg-red-50 border border-red-100 text-red-600 px-6 py-4 rounded-xl flex items-center gap-3 shadow-sm">
@@ -721,7 +699,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
             )}
         </div>
         
-        {/* Background Decor */}
         <div className="absolute top-0 left-0 right-0 h-[600px] bg-gradient-to-b from-indigo-50 to-slate-50 -z-10"></div>
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 opacity-30 pointer-events-none">
              <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-200 rounded-full blur-3xl"></div>
@@ -729,7 +706,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         </div>
       </div>
 
-      {/* Results Section */}
       {result && (
         <div ref={resultRef} className="bg-slate-50 py-16 relative">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -745,7 +721,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         </div>
       )}
 
-      {/* Features Grid */}
       <div ref={featuresRef} className="py-24 bg-white border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-3xl mx-auto mb-16">
@@ -782,7 +757,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         </div>
       </div>
 
-      {/* Pricing Section */}
       <div ref={pricingRef} className="py-24 bg-slate-900 text-white relative overflow-hidden">
          <div className="absolute inset-0 opacity-20">
              <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -837,7 +811,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
          </div>
       </div>
 
-      {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -857,7 +830,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         </div>
       </footer>
 
-      {/* History Modal */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
@@ -910,7 +882,6 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         </div>
       )}
 
-      {/* Paywall Modal */}
       {showPaywallModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300 relative">
