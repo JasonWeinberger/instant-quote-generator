@@ -293,9 +293,7 @@ const App: React.FC = () => {
   };
 
   // --- REFACTORED ACTIVATION LOGIC ---
-  // Only requires email. Generates random password for zero-friction setup.
-  // Wrapped in useCallback to prevent infinite loop in PaymentSuccessPage
-  const handlePaymentSuccessActivation = useCallback(async (email: string) => {
+  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       if (isSupabaseConfigured() && supabase) {
           // 1. Check if we already have a session
           const { data: sessionData } = await supabase.auth.getSession();
@@ -310,7 +308,7 @@ const App: React.FC = () => {
                
                await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
                setCurrentView('landing');
-               return;
+               return { result: 'success' };
           }
 
           // 2. Not logged in. Create new account with random password.
@@ -329,8 +327,9 @@ const App: React.FC = () => {
           });
 
           if (data.user) {
-              // Success: New user created
-              // Upsert to ensure DB is in sync
+              // Success: New user created or returned
+              
+              // Upsert to ensure DB is in sync (Supabase trigger might handle this, but being safe)
               const { error: upsertError } = await supabase.from('users').upsert({ 
                 id: data.user.id, 
                 email: email,
@@ -340,26 +339,22 @@ const App: React.FC = () => {
               
               if (upsertError) console.error("Upsert failed but continuing:", upsertError);
 
-              // If session exists (no email confirm needed), we are good.
-              // If session missing (email confirm needed), we still clear loading state but user needs to check email.
-              
               if (data.session) {
+                  // If we have a session, we are good to go!
                   await fetchUserProfile(data.user.id, email);
-                  localStorage.removeItem('pendingUpgradeEmail'); // Clean up
+                  localStorage.removeItem('pendingUpgradeEmail'); 
                   setCurrentView('landing');
-                  return;
+                  return { result: 'success' };
               } else {
-                   // If confirmation IS required by Supabase settings, we can't auto-login.
-                   // But we successfully "claimed" the account.
-                   throw new Error("Activation successful! Please check your email to sign in.");
+                   // NO SESSION = Email Confirmation Required (Supabase Default)
+                   return { result: 'confirmation_required' };
               }
           }
 
           if (error) {
-              // User likely exists. 
-              // Since we can't log them in without password, we have to ask them to login.
+              // Special handling if user already exists
               if (error.message.includes('already registered') || error.status === 400 || error.status === 422) {
-                   throw new Error("Account exists. Please Log In to activate.");
+                   return { result: 'existing_user' };
               }
               throw error;
           }
@@ -383,7 +378,9 @@ const App: React.FC = () => {
           }
           setShowPaywallModal(false);
           setCurrentView('landing');
+          return { result: 'success' };
       }
+      return { result: 'success' };
   }, [fetchUserProfile, user]);
 
   const handleLogout = async () => {

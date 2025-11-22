@@ -1,23 +1,21 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Check, Loader2, AlertCircle } from 'lucide-react';
+import { Check, Loader2, AlertCircle, Mail, ArrowRight, LogIn } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<void>;
+  onActivate: (email: string) => Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }>;
 }
 
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [status, setStatus] = useState<'loading' | 'error' | 'success'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'confirmation' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Ref to track if activation has already been attempted.
-  // This prevents double-execution in React Strict Mode and race conditions.
   const activationAttempted = useRef(false);
 
   useEffect(() => {
     // 1. Guard: Do not run activation if user is already active.
-    // This prevents re-running logic if the component re-renders with the updated user object.
     if (user?.status === 'active') {
         return;
     }
@@ -30,9 +28,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         // 1. Get email from local storage (set before Stripe redirect)
         const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
         
-        // 2. Fallback: If user is already logged in (e.g. upgrading from free), use that email.
-        // NOTE: Since the dependency array is empty [], 'user' here refers to the value AT MOUNT.
-        // This is intentional to prevent the effect from re-running when 'user' updates.
+        // 2. Fallback: If user is already logged in
         const targetEmail = pendingEmail || user?.email;
 
         if (!targetEmail) {
@@ -42,10 +38,14 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         }
 
         try {
-            await onActivate(targetEmail);
-            setStatus('success');
-            // onActivate in App.tsx typically handles the redirect, 
-            // but we set success state here just in case of delay.
+            const response = await onActivate(targetEmail);
+            if (response.result === 'confirmation_required') {
+                setStatus('confirmation');
+            } else if (response.result === 'existing_user') {
+                setStatus('existing_user');
+            } else {
+                setStatus('success');
+            }
         } catch (err: any) {
             console.error("Activation error:", err);
             setStatus('error');
@@ -55,8 +55,6 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
 
     activateAccount();
     
-    // 2. EXPLICIT REQUIREMENT: Empty dependency array.
-    // This ensures the logic runs exactly ONCE on mount, regardless of prop changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
@@ -71,6 +69,45 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <p className="text-slate-500 mb-6">{errorMessage}</p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
+                 </a>
+             </div>
+        </div>
+      );
+  }
+
+  if (status === 'confirmation') {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
+                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
+                     <Mail size={32} />
+                 </div>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Confirm Your Email</h2>
+                 <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                    Your payment was successful and your Pro account has been created! <br/><br/>
+                    For security, Supabase requires you to <strong>click the link sent to your email</strong> to finish activating your account.
+                 </p>
+                 <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                     Return to Login
+                 </a>
+             </div>
+        </div>
+      );
+  }
+
+  if (status === 'existing_user') {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
+                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-600">
+                     <LogIn size={32} />
+                 </div>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Account Exists</h2>
+                 <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                    Your payment was successful! It looks like you already have an account with this email.
+                 </p>
+                 <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                     Log In to Access Pro <ArrowRight size={16} />
                  </a>
              </div>
         </div>
