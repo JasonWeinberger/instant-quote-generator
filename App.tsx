@@ -60,12 +60,13 @@ const App: React.FC = () => {
     const search = window.location.search;
     const hash = window.location.hash;
 
-    if (
+    // Strict check for recovery flow
+    const isRecovery = 
         path === '/reset-password' || 
         search.includes('type=recovery') || 
-        search.includes('access_token') ||
-        hash.includes('type=recovery')
-    ) {
+        hash.includes('type=recovery');
+
+    if (isRecovery) {
         setCurrentView('reset_password');
     }
   }, []);
@@ -163,16 +164,30 @@ const App: React.FC = () => {
 
     client.auth.getSession().then(async ({ data: { session } }) => {
         if (session) {
-            await fetchUserProfile(session.user.id, session.user.email || '');
+            // If URL indicates recovery, do NOT verify profile yet or shift view
+            if (!window.location.hash.includes('type=recovery') && window.location.pathname !== '/reset-password') {
+                await fetchUserProfile(session.user.id, session.user.email || '');
+            }
         }
     });
     
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
+        // Critical: Check if this is a recovery flow
+        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+
+        if (event === 'PASSWORD_RECOVERY' || isRecovery) {
             setCurrentView('reset_password');
         } else if (!session) {
-            setUser(null);
+             if (!isRecovery) {
+                setUser(null);
+             }
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+             // If recovery is active, ignore the sign-in redirect to landing
+             if (isRecovery) {
+                 setCurrentView('reset_password');
+                 return; 
+             }
+
              if (session) {
                  // Check for pending upgrades
                  const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
@@ -325,6 +340,7 @@ const App: React.FC = () => {
       if (supabase) {
           const client = supabase!;
           const { error } = await client.auth.resetPasswordForEmail(email, {
+              // Point explicitly to the reset-password path so App.tsx detects it
               redirectTo: `${window.location.origin}/reset-password`,
           });
           if (error) throw error;
@@ -344,9 +360,11 @@ const App: React.FC = () => {
       if (supabase) {
           const client = supabase!;
 
-          // 1. Check if already logged in
+          // 1. Check if we already have a session (unlikely if they just paid, but possible)
           const { data: sessionData } = await client.auth.getSession();
+          
           if (sessionData.session) {
+               // Already logged in, just upgrade them
                await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
                await client.from('users').upsert({ 
                     id: sessionData.session.user.id,
@@ -361,10 +379,11 @@ const App: React.FC = () => {
                return { result: 'success' };
           }
 
-          // 2. Passwordless Signup (We generate a random secure password user never sees)
+          // 2. Not logged in. Attempt Passwordless Signup (Random Password)
           const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
           
           try {
+            // This should return a session immediately if email confirmation is OFF
             const { data, error } = await client.auth.signUp({ 
                 email, 
                 password: randomPassword,
@@ -373,24 +392,22 @@ const App: React.FC = () => {
                 }
             });
 
-            if (data.user) {
-                // Even if session is missing (confirmation ON), we mark as success 
-                // so the user is redirected to landing (and can login later via Forgot Password)
-                if (data.session) {
-                    await client.from('users').upsert({ 
-                        id: data.user.id, 
-                        email: email,
-                        status: 'active',
-                        plan: 'pro'
-                    });
-                    await fetchUserProfile(data.user.id, email);
-                }
+            // Case A: Success (New Account Created)
+            if (data.user && data.session) {
+                await client.from('users').upsert({ 
+                    id: data.user.id, 
+                    email: email,
+                    status: 'active',
+                    plan: 'pro'
+                });
+                await fetchUserProfile(data.user.id, email);
                 
                 localStorage.removeItem('pendingUpgradeEmail'); 
                 setCurrentView('landing');
                 return { result: 'success' };
             }
 
+            // Case B: Error
             if (error) {
                 const isAlreadyRegistered = 
                     error.message.toLowerCase().includes('already registered') || 
@@ -400,13 +417,18 @@ const App: React.FC = () => {
                 if (isAlreadyRegistered) {
                     return { result: 'existing_user' };
                 }
-                // For any other error, log it but return success to prevent UI hang
-                console.warn("Signup non-fatal error:", error);
-                return { result: 'success' };
+                // Unknown error
+                throw error;
             }
+            
+            // Case C: User created but no session (Confirmation might be ON despite request)
+            // We treat this as success to not block them, but they won't be logged in.
+            // Ideally this path isn't taken if config is correct.
+            return { result: 'success' };
+
           } catch (e) {
-              console.error("Unexpected activation error", e);
-              // Fallback to success to ensure user reaches landing page
+              console.error("Activation exception:", e);
+              // Fail gracefully -> maybe user can login later
               return { result: 'success' };
           }
 
@@ -425,7 +447,6 @@ const App: React.FC = () => {
           setCurrentView('landing');
           return { result: 'success' };
       }
-      return { result: 'success' };
   }, [fetchUserProfile, user]);
 
   const handleLogout = async () => {
@@ -456,7 +477,9 @@ const App: React.FC = () => {
 
   if (currentView === 'reset_password') {
       return <ResetPasswordPage onSuccess={() => {
-          window.location.href = '/'; 
+          // Clear URL params/hash and go to landing
+          window.history.replaceState(null, '', '/');
+          setCurrentView('landing');
       }} />;
   }
 

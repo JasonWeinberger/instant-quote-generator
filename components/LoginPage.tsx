@@ -16,7 +16,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,32 +53,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
         setIsLoading(false);
     }
   };
-
-  if (needsConfirmation) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 animate-fade-in-up">
-             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
-                     <Mail size={32} />
-                 </div>
-                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
-                 <p className="text-slate-500 mb-8">
-                     We've sent a confirmation link to <strong>{email}</strong>.
-                 </p>
-                 <button
-                    onClick={() => {
-                        setNeedsConfirmation(false);
-                        setAuthMode('signin');
-                        setError(null);
-                    }}
-                    className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
-                 >
-                     Return to Sign In
-                 </button>
-             </div>
-        </div>
-      );
-  }
 
   if (resetSent) {
       return (

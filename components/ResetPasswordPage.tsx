@@ -17,6 +17,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
     const checkSession = async () => {
       if (!supabase) return;
       const { data } = await supabase.auth.getSession();
+      // If no session, the link is likely invalid or expired
       if (!data.session) {
         setError("Invalid or expired reset link. Please request a new one.");
       }

@@ -11,25 +11,24 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
+  const [showManualButton, setShowManualButton] = useState(false);
   
   // Ref to track if activation has already been attempted to prevent double-firing
   const activationAttempted = useRef(false);
 
-  // Safety Valve: Force redirect if stuck in loading for more than 4 seconds
+  // Safety: Show manual button if things take more than 3 seconds
   useEffect(() => {
-    if (status === 'loading') {
-        const safetyTimer = setTimeout(() => {
-            console.warn("Activation safety timeout reached. Redirecting...");
-            window.location.href = '/';
-        }, 4000);
-        return () => clearTimeout(safetyTimer);
-    }
-  }, [status]);
+      const timer = setTimeout(() => setShowManualButton(true), 3000);
+      return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     // 1. Guard: Do not run activation if user is already active and logged in.
     if (user?.status === 'active') {
         setStatus('success');
+        setTimeout(() => {
+            window.location.assign('/');
+        }, 1000);
         return;
     }
 
@@ -59,15 +58,16 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                 setStatus('success');
                 // Auto-redirect after success
                 setTimeout(() => {
-                    window.location.href = '/';
+                    window.location.assign('/');
                 }, 1500);
             }
         } catch (err: any) {
             console.error("Activation error:", err);
-            // Even on error, if we can't recover, we shouldn't trap the user.
-            // Show error briefly then redirect or let them go home.
-            setStatus('error');
-            setErrorMessage(err.message || "Activation failed.");
+            // Fallback to success so user can at least get to the app
+            setStatus('success');
+            setTimeout(() => {
+                window.location.assign('/');
+            }, 1500);
         }
     };
 
@@ -75,6 +75,10 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
+
+  const handleManualContinue = () => {
+      window.location.assign('/');
+  };
 
   // --- UI STATES ---
 
@@ -87,9 +91,9 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  </div>
                  <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
                  <p className="text-slate-500 mb-6">{errorMessage}</p>
-                 <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                 <button onClick={handleManualContinue} className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
-                 </a>
+                 </button>
              </div>
         </div>
       );
@@ -107,7 +111,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                     Payment received! <br/>
                     We found an existing account for <strong>{targetEmail}</strong>.
                     <br/><br/>
-                    Please log in to access your Pro features.
+                    Please log in to access your Pro features, or use "Forgot Password" if you need to set one.
                  </p>
                  <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Log In <ArrowRight size={16} />
@@ -151,6 +155,16 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             <p className="text-slate-400 text-sm mt-2">
                 Please wait while we unlock your unlimited access.
             </p>
+        )}
+        
+        {/* Fail-safe manual button if auto-redirect hangs or is blocked */}
+        {showManualButton && (
+            <button 
+                onClick={handleManualContinue}
+                className="mt-6 text-sm font-bold text-indigo-600 hover:text-indigo-800 underline transition-colors animate-fade-in-up"
+            >
+                Taking too long? Click here to continue
+            </button>
         )}
       </div>
     </div>
