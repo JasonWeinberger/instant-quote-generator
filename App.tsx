@@ -490,12 +490,20 @@ const App: React.FC = () => {
 
   if (currentView === 'login') {
       return (
-        <LoginPage 
-            onAuth={handleAuth} 
-            onResetPassword={handleResetPassword}
-            onBack={() => setCurrentView('landing')} 
-            onUpgrade={handleUpgradeClick}
-        />
+        <>
+            <EmailCaptureModal 
+                isOpen={showEmailModal} 
+                onClose={() => setShowEmailModal(false)} 
+                onSubmit={handleEmailSubmit}
+                initialEmail={user?.email}
+            />
+            <LoginPage 
+                onAuth={handleAuth} 
+                onResetPassword={handleResetPassword}
+                onBack={() => setCurrentView('landing')} 
+                onUpgrade={handleUpgradeClick}
+            />
+        </>
       );
   }
 
