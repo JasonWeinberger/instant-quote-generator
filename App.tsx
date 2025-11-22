@@ -121,11 +121,14 @@ const App: React.FC = () => {
 
   // Initialize
   useEffect(() => {
-    if (typeof process !== 'undefined' && process.env.API_KEY === undefined) {
-        // Check if we are in a browser env where process is not polyfilled fully
-        // Usually vite handles this, but strict check prevents crash
-    } else if (!process.env.API_KEY) {
-        setApiKeyMissing(true);
+    // Safer check for API Key that won't crash if process is undefined
+    try {
+        if (!process.env.API_KEY) {
+            setApiKeyMissing(true);
+        }
+    } catch (e) {
+        // Fallback if process check fails
+        console.warn("Could not check API key environment variable");
     }
 
     const storedCount = localStorage.getItem('quoteUsageCount');
@@ -350,18 +353,16 @@ const App: React.FC = () => {
           console.log("Starting activation for:", email);
 
           try {
-            // 1. Check if we already have a session
+            // 1) Check existing session
             const { data: sessionData, error: sessionError } = await client.auth.getSession();
-            
             if (sessionError) {
-                console.error('getSession error', sessionError);
+              console.error('getSession error', sessionError);
             }
-            
+
             if (sessionData.session) {
-                 console.log("Session exists, upgrading user.");
-                 // We have a session, ensure user is active in DB
-                 await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-                 try {
+                // update metadata + users table, then return success
+                try {
+                    await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
                     await client.from('users').upsert({ 
                         id: sessionData.session.user.id,
                         email: sessionData.session.user.email,
@@ -369,19 +370,18 @@ const App: React.FC = () => {
                         plan: 'pro',
                         updated_at: new Date().toISOString()
                     });
-                 } catch (e) { 
-                     console.error("Upsert failed for existing session", e);
-                     return { result: 'error' };
-                 }
-
-                 await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-                 localStorage.removeItem('pendingUpgradeEmail');
-                 return { result: 'success' };
+                    
+                    await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+                    localStorage.removeItem('pendingUpgradeEmail');
+                    return { result: 'success' };
+                } catch (e) {
+                    console.error("Upsert/Update failed for existing session", e);
+                    return { result: 'error' };
+                }
             }
 
-            // 2. Not logged in. Attempt Passwordless Signup (Random Password)
+            // 2) Try signUp with random password
             const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-            
             const { data, error } = await client.auth.signUp({ 
                 email, 
                 password: randomPassword,
@@ -393,25 +393,20 @@ const App: React.FC = () => {
             if (error) {
                 console.error('signUp error', error);
                 const msg = (error.message || '').toLowerCase();
-                const isAlreadyRegistered = 
-                    msg.includes('already registered') || 
-                    msg.includes('user already exists') ||
-                    error.status === 400 || 
-                    error.status === 422;
-
+                const isAlreadyRegistered = msg.includes('already') || msg.includes('exists') || error.status === 422;
                 if (isAlreadyRegistered) {
                     return { result: 'existing_user' };
                 }
-                // Strict error handling
+                // For ANY other error, return error and DO NOT redirect
                 return { result: 'error' };
             }
 
-            if (!data.user || !data.session) {
+            if (!data?.user || !data.session) {
                 console.error('signUp returned no session or no user', data);
                 return { result: 'error' };
             }
 
-            // 3. Upsert Pro user row
+            // 3) Upsert Pro user row
             try {
                 await client.from('users').upsert({ 
                     id: data.user.id, 
@@ -421,13 +416,12 @@ const App: React.FC = () => {
                     updated_at: new Date().toISOString()
                 });
                 await fetchUserProfile(data.user.id, email);
+                localStorage.removeItem('pendingUpgradeEmail'); 
+                return { result: 'success' };
             } catch (e) {
                 console.error("Upsert failed for new user", e);
                 return { result: 'error' };
             }
-            
-            localStorage.removeItem('pendingUpgradeEmail'); 
-            return { result: 'success' };
 
           } catch (e) {
               console.error("Activation exception:", e);
@@ -448,7 +442,7 @@ const App: React.FC = () => {
           setShowPaywallModal(false);
           return { result: 'success' };
       }
-  }, [fetchUserProfile, user]);
+  }, [fetchUserProfile]);
 
   const handleLogout = async () => {
       if (supabase) {
@@ -488,7 +482,6 @@ const App: React.FC = () => {
         <PaymentSuccessPage 
             user={user} 
             onActivate={handlePaymentSuccessActivation} 
-            onComplete={() => setCurrentView('landing')}
         />
       );
   }

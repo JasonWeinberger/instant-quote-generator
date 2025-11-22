@@ -5,10 +5,9 @@ import { User } from '../shared-types';
 interface PaymentSuccessPageProps {
   user: User | null;
   onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'error' }>;
-  onComplete: () => void;
 }
 
-export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate, onComplete }) => {
+export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
@@ -17,57 +16,44 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const activationAttempted = useRef(false);
 
   useEffect(() => {
-    // Show manual button after a few seconds if things are taking a while
+    // Show manual button after 4 seconds if things are taking a while
     const manualButtonTimer = setTimeout(() => setShowManualButton(true), 4000);
     return () => clearTimeout(manualButtonTimer);
   }, []);
 
   useEffect(() => {
-    // Guard: Do not run activation if user is already active and logged in.
-    if (user?.status === 'active') {
-        setStatus('success');
-        setTimeout(() => { window.location.href = '/'; }, 1000);
-        return;
+    if (activationAttempted.current) return;
+    activationAttempted.current = true;
+
+    const pendingEmail = localStorage.getItem('pendingUpgradeEmail') || user?.email;
+    if (!pendingEmail) {
+      setStatus('error');
+      setErrorMessage('Could not find account details. Please contact support.');
+      return;
     }
+    setTargetEmail(pendingEmail);
 
-    const activateAccount = async () => {
-        if (activationAttempted.current) return;
-        activationAttempted.current = true;
-
-        const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
-        const emailToUse = pendingEmail || user?.email;
-
-        if (!emailToUse) {
-            setStatus('error');
-            setErrorMessage("Could not find account details. Please contact support.");
-            return;
+    (async () => {
+      try {
+        const res = await onActivate(pendingEmail);
+        if (res.result === 'success') {
+          setStatus('success');
+          // Strict success redirect
+          setTimeout(() => (window.location.href = '/'), 1000);
+        } else if (res.result === 'existing_user') {
+          setStatus('existing_user');
+        } else {
+          // 'error'
+          setStatus('error');
+          setErrorMessage('We could not activate your account automatically. Please try logging in or contact support.');
         }
-        setTargetEmail(emailToUse);
-
-        try {
-            const response = await onActivate(emailToUse);
-            
-            if (response.result === 'success') {
-                setStatus('success');
-                // Strict success redirect
-                setTimeout(() => { window.location.href = '/'; }, 1000);
-            } else if (response.result === 'existing_user') {
-                setStatus('existing_user');
-            } else {
-                // 'error'
-                setStatus('error');
-                setErrorMessage('We could not activate your account automatically. Please try logging in or contact support.');
-            }
-        } catch (err: any) {
-            console.error("Activation error in component:", err);
-            setStatus('error');
-            setErrorMessage('Unexpected error while activating your account.');
-        }
-    };
-
-    activateAccount();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 
+      } catch (err) {
+        console.error('Activation exception', err);
+        setStatus('error');
+        setErrorMessage('Unexpected error while activating your account.');
+      }
+    })();
+  }, [onActivate, user?.email]); 
 
   const handleManualContinue = () => {
       // Manual escape hatch
