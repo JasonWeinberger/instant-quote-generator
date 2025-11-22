@@ -58,8 +58,8 @@ const App: React.FC = () => {
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       const client = supabase;
       if (!client) return;
-      // Capture client in local scope for async safety
-      const dbClient = client;
+      // Capture client in local scope for async safety with explicit non-null assertion
+      const dbClient = client!;
 
       try {
           // Parallel fetch: Auth Metadata (Source of Truth for Signup) & Public DB Profile
@@ -136,8 +136,8 @@ const App: React.FC = () => {
     const client = supabase;
     if (client) {
         // REAL MODE: Check Supabase Session
-        // Use a locally scoped variable 'authClient' to guarantee non-null type in closures
-        const authClient = client;
+        // Use a locally scoped variable 'authClient' with non-null assertion
+        const authClient = client!;
         
         authClient.auth.getSession().then(async ({ data: { session } }) => {
             if (session) {
@@ -279,7 +279,8 @@ const App: React.FC = () => {
       
       const client = supabase;
       if (user && client) {
-          const dbResponse = await client.from('quotes').insert({
+          const dbClient = client!;
+          const dbResponse = await dbClient.from('quotes').insert({
               user_id: user.id,
               industry: industry,
               job_description: jobDescription,
@@ -301,7 +302,8 @@ const App: React.FC = () => {
   const handleAuth = async (email: string, password?: string) => {
       const client = supabase;
       if (client && password) {
-          const { error } = await client.auth.signInWithPassword({ email, password });
+          const authClient = client!;
+          const { error } = await authClient.auth.signInWithPassword({ email, password });
           if (error) throw error;
           setCurrentView('landing');
       } else {
@@ -330,7 +332,8 @@ const App: React.FC = () => {
   const handleResetPassword = async (email: string) => {
       const client = supabase;
       if (client) {
-          const { error } = await client.auth.resetPasswordForEmail(email, {
+          const authClient = client!;
+          const { error } = await authClient.auth.resetPasswordForEmail(email, {
               redirectTo: window.location.origin,
           });
           if (error) throw error;
@@ -340,7 +343,8 @@ const App: React.FC = () => {
   const handleUpdatePassword = async (password: string) => {
       const client = supabase;
       if (client) {
-          const { error } = await client.auth.updateUser({ password: password });
+          const authClient = client!;
+          const { error } = await authClient.auth.updateUser({ password: password });
           if (error) throw error;
       }
   };
@@ -349,8 +353,8 @@ const App: React.FC = () => {
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }> => {
       const client = supabase;
       if (client) {
-          // Scope client for type safety
-          const authClient = client;
+          // Scope client for type safety with explicit non-null assertion
+          const authClient = client!;
 
           // 1. Check if we already have a session (maybe user was logged in already)
           const { data: sessionData } = await authClient.auth.getSession();
@@ -479,7 +483,8 @@ const App: React.FC = () => {
   const handleLogout = async () => {
       const client = supabase;
       if (client) {
-          await client.auth.signOut();
+          const authClient = client!;
+          await authClient.auth.signOut();
       }
       setUser(null);
       localStorage.removeItem('quoteGenUser');
@@ -490,7 +495,8 @@ const App: React.FC = () => {
       setUser(updatedUser);
       const client = supabase;
       if (client && user?.id) {
-          await client.from('users').update({
+          const dbClient = client!;
+          await dbClient.from('users').update({
                 company_name: updatedUser.companyName,
                 company_phone: updatedUser.companyPhone,
                 company_address: updatedUser.companyAddress
