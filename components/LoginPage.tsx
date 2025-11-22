@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, AlertCircle, Check, Zap, ArrowRight } from 'lucide-react';
 
 interface LoginPageProps {
-  onAuth: (email: string, password?: string, isSignUp?: boolean) => Promise<void | { requiresConfirmation?: boolean }>;
+  onAuth: (email: string, password?: string) => Promise<void | { requiresConfirmation?: boolean }>;
   onResetPassword: (email: string) => Promise<void>;
   onBack: () => void;
   onUpgrade: () => void;
@@ -47,7 +47,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
 
     try {
         // Always false for isSignUp, because signup happens after payment
-        await onAuth(email, password, false);
+        await onAuth(email, password);
     } catch (err: any) {
         console.error(err);
         setError(err.message || "Authentication failed. Please check your credentials.");
