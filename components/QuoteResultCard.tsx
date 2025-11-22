@@ -25,43 +25,49 @@ export const QuoteResultCard: React.FC<QuoteResultCardProps> = ({ result, user }
 
   const handleDownloadPDF = () => {
     setIsDownloading(true);
-    const element = document.getElementById('quote-card-content');
     
-    // Formatting filename
-    const companyPrefix = user?.companyName ? user.companyName.replace(/[^a-z0-9]/gi, '_') : 'Quote';
-    const dateStr = new Date().toISOString().split('T')[0];
-    const filename = `${companyPrefix}_Estimate_${dateStr}.pdf`;
+    // Small delay to ensure React state updates (spinner) are painted
+    // and to unblock the main thread before heavy canvas operations.
+    setTimeout(() => {
+        const element = document.getElementById('quote-card-content');
+        
+        // Formatting filename
+        const companyPrefix = user?.companyName ? user.companyName.replace(/[^a-z0-9]/gi, '_') : 'Quote';
+        const dateStr = new Date().toISOString().split('T')[0];
+        const filename = `${companyPrefix}_Estimate_${dateStr}.pdf`;
 
-    const opt = {
-      margin: 0.5,
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { 
-        scale: 2, // Higher scale for better resolution
-        useCORS: true,
-        logging: false,
-        ignoreElements: (element: Element) => {
-            // Ignore buttons that shouldn't be in the PDF
-            return element.classList.contains('no-print');
-        }
-      },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
+        const opt = {
+          margin: 0.5,
+          filename: filename,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { 
+            scale: 2, // Higher scale for better resolution
+            useCORS: true,
+            logging: false,
+            scrollY: 0, // CRITICAL FIX: Prevents blank PDF when page is scrolled
+            ignoreElements: (element: Element) => {
+                // Ignore buttons that shouldn't be in the PDF
+                return element.classList.contains('no-print');
+            }
+          },
+          jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+        };
 
-    // Access global html2pdf loaded via script tag in index.html
-    // @ts-ignore
-    if (window.html2pdf) {
+        // Access global html2pdf loaded via script tag in index.html
         // @ts-ignore
-        window.html2pdf().set(opt).from(element).save().then(() => {
+        if (window.html2pdf) {
+            // @ts-ignore
+            window.html2pdf().set(opt).from(element).save().then(() => {
+                setIsDownloading(false);
+            }).catch((err: any) => {
+                console.error("PDF Generation failed", err);
+                setIsDownloading(false);
+            });
+        } else {
+            console.error("html2pdf library not loaded");
             setIsDownloading(false);
-        }).catch((err: any) => {
-            console.error("PDF Generation failed", err);
-            setIsDownloading(false);
-        });
-    } else {
-        console.error("html2pdf library not loaded");
-        setIsDownloading(false);
-    }
+        }
+    }, 100);
   };
 
   const handleBreakdownChange = (key: keyof CostBreakdown, value: string) => {
