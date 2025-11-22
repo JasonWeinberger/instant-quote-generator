@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Lock, Eye, EyeOff, AlertCircle, ArrowRight, Check, KeyRound } from 'lucide-react';
+import { Lock, Eye, EyeOff, AlertCircle, ArrowRight, KeyRound } from 'lucide-react';
 
 interface ResetPasswordPageProps {
   onSuccess: () => void;
@@ -15,7 +15,8 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
   useEffect(() => {
     // Ensure we have a session (Supabase handles the token from URL automatically)
     const checkSession = async () => {
-      const { data } = await supabase!.auth.getSession();
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
       if (!data.session) {
         setError("Invalid or expired reset link. Please request a new one.");
       }
@@ -34,8 +35,14 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
       return;
     }
 
+    if (!supabase) {
+        setError("Supabase client not initialized.");
+        setLoading(false);
+        return;
+    }
+
     try {
-      const { error } = await supabase!.auth.updateUser({ password: password });
+      const { error } = await supabase.auth.updateUser({ password: password });
       if (error) throw error;
       
       // Successful update

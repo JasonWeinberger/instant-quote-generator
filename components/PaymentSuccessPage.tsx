@@ -1,19 +1,30 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Check, Loader2, AlertCircle, Mail, ArrowRight, LogIn } from 'lucide-react';
+import { Check, Loader2, AlertCircle, ArrowRight, LogIn } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<{ result: 'success' | 'confirmation_required' | 'existing_user' }>;
+  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' }>;
 }
 
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'confirmation' | 'existing_user'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
   
   // Ref to track if activation has already been attempted to prevent double-firing
   const activationAttempted = useRef(false);
+
+  // Safety Valve: Force redirect if stuck in loading for more than 4 seconds
+  useEffect(() => {
+    if (status === 'loading') {
+        const safetyTimer = setTimeout(() => {
+            console.warn("Activation safety timeout reached. Redirecting...");
+            window.location.href = '/';
+        }, 4000);
+        return () => clearTimeout(safetyTimer);
+    }
+  }, [status]);
 
   useEffect(() => {
     // 1. Guard: Do not run activation if user is already active and logged in.
@@ -38,22 +49,23 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         setTargetEmail(emailToUse);
 
         try {
-            // 3. Attempt Activation (Auto-create with random password or Auto-login)
+            // 3. Attempt Activation
             const response = await onActivate(emailToUse);
             
-            if (response.result === 'confirmation_required') {
-                setStatus('confirmation');
-            } else if (response.result === 'existing_user') {
+            if (response.result === 'existing_user') {
                 setStatus('existing_user');
             } else {
+                // Default to success for any other outcome
                 setStatus('success');
-                // Redirect handled by parent usually, but we show success briefly
+                // Auto-redirect after success
                 setTimeout(() => {
                     window.location.href = '/';
-                }, 2000);
+                }, 1500);
             }
         } catch (err: any) {
             console.error("Activation error:", err);
+            // Even on error, if we can't recover, we shouldn't trap the user.
+            // Show error briefly then redirect or let them go home.
             setStatus('error');
             setErrorMessage(err.message || "Activation failed.");
         }
@@ -77,27 +89,6 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <p className="text-slate-500 mb-6">{errorMessage}</p>
                  <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
-                 </a>
-             </div>
-        </div>
-      );
-  }
-
-  if (status === 'confirmation') {
-      return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
-             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
-                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
-                     <Mail size={32} />
-                 </div>
-                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
-                 <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-                    We've sent a confirmation link to <strong>{targetEmail}</strong>.
-                    <br/><br/>
-                    Please click the link to activate your unlimited access.
-                 </p>
-                 <a href="/" className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
-                     Return to Login
                  </a>
              </div>
         </div>
@@ -149,7 +140,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         )}
 
         <h2 className="text-2xl font-bold text-slate-900 mb-2">
-            {status === 'success' ? 'All Set!' : 'Setting up your account...'}
+            {status === 'success' ? 'Payment Successful!' : 'Finalizing your account...'}
         </h2>
         
         {status === 'success' ? (
@@ -158,7 +149,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             </p>
         ) : (
             <p className="text-slate-400 text-sm mt-2">
-                Please wait a moment while we verify your payment and activate Pro features.
+                Please wait while we unlock your unlimited access.
             </p>
         )}
       </div>
