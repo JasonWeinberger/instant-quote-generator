@@ -14,6 +14,8 @@ import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight
 
 const MAX_FREE_QUOTES = 3;
 
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_password';
 
 const BrandLogo: React.FC = () => (
@@ -226,10 +228,15 @@ const App: React.FC = () => {
   };
 
   const handleEmailSubmit = (email: string) => {
-      localStorage.setItem('pendingUpgradeEmail', email);
-      setShowEmailModal(false);
-      window.open(STRIPE_LINKS.monthly, '_blank');
-  };
+        const cleanedEmail = normalizeEmail(email);
+        if (!cleanedEmail) {
+            console.warn('[upgrade] attempted to continue without a valid email');
+            return;
+        }
+        localStorage.setItem('pendingUpgradeEmail', cleanedEmail);
+        setShowEmailModal(false);
+        window.open(STRIPE_LINKS.monthly, '_blank');
+    };
 
   const handleGenerateClick = async () => {
     if (isLimitReached) {
@@ -347,127 +354,158 @@ const App: React.FC = () => {
   type ActivationResult = 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error';
 
   const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: ActivationResult, message?: string }> => {
-      console.log('[activate] start', email);
+        const targetEmail = normalizeEmail(email);
+        if (!targetEmail) {
+            console.warn('[activate] missing email input');
+            return { result: 'error', message: 'We could not determine which email to activate.' };
+        }
 
-      if (!supabase) {
-          // DEMO MODE
-          const newUser: User = {
-              id: `local_paid_${Date.now()}`,
-              email: email,
-              plan: 'pro',
-              status: 'active',
-              trialStartDate: Date.now()
-          };
-          setUser(newUser);
-          localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-          setShowPaywallModal(false);
-          console.log('[activate] DONE (demo mode)');
-          return { result: 'success' };
-      }
+        console.log('[activate] start', targetEmail);
 
-      const client = supabase!;
+        if (!supabase) {
+            // DEMO MODE
+            const newUser: User = {
+                id: `local_paid_${Date.now()}`,
+                email: targetEmail,
+                plan: 'pro',
+                status: 'active',
+                trialStartDate: Date.now()
+            };
+            setUser(newUser);
+            localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
+            setShowPaywallModal(false);
+            console.log('[activate] DONE (demo mode)');
+            return { result: 'success' };
+        }
 
-      try {
-        // A) Check existing session
-        const { data: sessionData, error: sessionError } = await client.auth.getSession();
-        console.log('[activate] getSession', { sessionData, sessionError });
+        const client = supabase!;
 
-        if (sessionData?.session) {
-          console.log('[activate] already have session, upgrading user');
-          
-          await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-          
-          const { error: upsertError } = await client.from('users').upsert({
-            id: sessionData.session.user.id,
-            email: sessionData.session.user.email,
-            status: 'active',
-            plan: 'pro',
-            updated_at: new Date().toISOString(),
+        try {
+          // A) Check existing session
+          const { data: sessionData, error: sessionError } = await client.auth.getSession();
+          console.log('[activate] getSession', { sessionData, sessionError });
+
+          const existingSession = sessionData?.session;
+          const sessionEmail = existingSession?.user?.email ? normalizeEmail(existingSession.user.email) : null;
+
+          if (existingSession) {
+              if (sessionEmail === targetEmail) {
+                  console.log('[activate] matching session detected, upgrading user');
+                  
+                  await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+                  
+                  const { error: upsertError } = await client.from('users').upsert({
+                    id: existingSession.user.id,
+                    email: existingSession.user.email || targetEmail,
+                    status: 'active',
+                    plan: 'pro',
+                    updated_at: new Date().toISOString(),
+                  });
+
+                  if (upsertError) {
+                     console.error('[activate] upsert error (existing session)', upsertError);
+                     throw upsertError;
+                  }
+
+                  await fetchUserProfile(existingSession.user.id, existingSession.user.email || targetEmail);
+                  localStorage.removeItem('pendingUpgradeEmail');
+                  console.log('[activate] DONE (existing session)');
+                  return { result: 'success' };
+              } else {
+                  console.warn('[activate] session email mismatch, signing out before retry', { sessionEmail, targetEmail });
+                  await client.auth.signOut();
+              }
+          }
+
+          // B) Try sign-up with random password
+          const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+          console.log('[activate] signUp start', { targetEmail });
+
+        const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
+              email: targetEmail, 
+              password: randomPassword,
+              options: {
+                  data: { status: 'active', plan: 'pro' }
+              }
           });
 
-          if (upsertError) {
-             console.error('[activate] upsert error (existing session)', upsertError);
-             throw upsertError;
-          }
+          console.log('[activate] signUp result', { signUpData, signUpError });
 
-          await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-          localStorage.removeItem('pendingUpgradeEmail');
-          console.log('[activate] DONE (existing session)');
-          return { result: 'success' };
-        }
+        if (signUpError) {
+            const msg = (signUpError.message || '').toLowerCase();
+            const code = typeof signUpError.code === 'string' ? signUpError.code.toLowerCase() : '';
+            
+            if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
+                console.log('[activate] existing user case - sending OTP login');
+                const otpOptions = typeof window !== 'undefined'
+                    ? { emailRedirectTo: `${window.location.origin}/reset-password` }
+                    : {};
 
-        // B) Try sign-up with random password
-        const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-        console.log('[activate] signUp start', { email, randomPassword });
+                const { error: otpError } = await client.auth.signInWithOtp({
+                    email: targetEmail,
+                    options: otpOptions
+                });
 
-      const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
-            email, 
-            password: randomPassword,
-            options: {
-                data: { status: 'active', plan: 'pro' }
+                if (otpError) {
+                    console.warn('[activate] signInWithOtp failed', otpError);
+                    return { result: 'existing_user', message: 'We found an existing account. Please log in to finish enabling Pro access.' };
+                }
+
+                return { 
+                    result: 'email_confirmation_required', 
+                    message: 'We found an existing account and emailed you a secure login link to finish activation.' 
+                };
             }
-        });
 
-        console.log('[activate] signUp result', { signUpData, signUpError });
+            if (signUpError.status === 429 || msg.includes('rate limit') || code === 'over_email_send_rate_limit') {
+                console.warn('[activate] rate limit encountered on signUp');
+                return { 
+                    result: 'rate_limited',
+                    message: 'We just sent a confirmation email. Please wait a minute before retrying the activation.'
+                };
+            }
 
-      if (signUpError) {
-          const msg = (signUpError.message || '').toLowerCase();
-          const code = typeof signUpError.code === 'string' ? signUpError.code.toLowerCase() : '';
-          
-          if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-              console.log('[activate] existing user case');
-              return { result: 'existing_user' };
+            console.error('[activate] signUp error (fatal)', signUpError);
+            throw signUpError;
+        }
+
+          // Handle Email Confirmation Required (User returned but no Session)
+          // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
+          if (signUpData.user && !signUpData.session) {
+               console.log('[activate] signUp successful but no session (email confirmation required)');
+              return { result: 'email_confirmation_required' };
           }
 
-          if (signUpError.status === 429 || msg.includes('rate limit') || code === 'over_email_send_rate_limit') {
-              console.warn('[activate] rate limit encountered on signUp');
-              return { 
-                  result: 'rate_limited',
-                  message: 'We just sent a confirmation email. Please wait a minute before retrying the activation.'
-              };
+          if (!signUpData?.user || !signUpData.session) {
+               console.error('[activate] signUp returned no user or session', signUpData);
+               throw new Error('Signup returned no session');
           }
 
-          console.error('[activate] signUp error (fatal)', signUpError);
-          throw signUpError;
+          // C) Upsert profile row (Authenticated)
+          const { error: upsertError } = await client.from('users').upsert({ 
+              id: signUpData.user.id, 
+              email: targetEmail,
+              status: 'active',
+              plan: 'pro',
+              updated_at: new Date().toISOString()
+          });
+          console.log('[activate] upsert result', { upsertError });
+
+          if (upsertError) {
+              console.error('[activate] upsert error', upsertError);
+              throw upsertError;
+          }
+
+          await fetchUserProfile(signUpData.user.id, targetEmail);
+          localStorage.removeItem('pendingUpgradeEmail'); 
+          console.log('[activate] DONE (new signup)');
+          return { result: 'success' };
+
+      } catch (err: any) {
+          console.error('[activate] UNHANDLED ERROR', err);
+          return { result: 'error', message: err?.message || 'Activation failed. Please try again or contact support.' }; 
       }
-
-        // Handle Email Confirmation Required (User returned but no Session)
-        // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
-        if (signUpData.user && !signUpData.session) {
-             console.log('[activate] signUp successful but no session (email confirmation required)');
-            return { result: 'email_confirmation_required' };
-        }
-
-        if (!signUpData?.user || !signUpData.session) {
-             console.error('[activate] signUp returned no user or session', signUpData);
-             throw new Error('Signup returned no session');
-        }
-
-        // C) Upsert profile row (Authenticated)
-        const { error: upsertError } = await client.from('users').upsert({ 
-            id: signUpData.user.id, 
-            email: email,
-            status: 'active',
-            plan: 'pro',
-            updated_at: new Date().toISOString()
-        });
-        console.log('[activate] upsert result', { upsertError });
-
-        if (upsertError) {
-            console.error('[activate] upsert error', upsertError);
-            throw upsertError;
-        }
-
-        await fetchUserProfile(signUpData.user.id, email);
-        localStorage.removeItem('pendingUpgradeEmail'); 
-        console.log('[activate] DONE (new signup)');
-        return { result: 'success' };
-
-    } catch (err: any) {
-        console.error('[activate] UNHANDLED ERROR', err);
-        return { result: 'error', message: err?.message || 'Activation failed. Please try again or contact support.' }; 
-    }
-}, [fetchUserProfile]);
+  }, [fetchUserProfile]);
 
   const handleLogout = async () => {
       if (supabase) {

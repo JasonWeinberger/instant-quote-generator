@@ -2,6 +2,9 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Check, Loader2, AlertCircle, ArrowRight, LogIn, Mail, RefreshCcw } from 'lucide-react';
 import { User } from '../shared-types';
 
+const MANUAL_ENTRY_DELAY_MS = 12000;
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
 interface PaymentSuccessPageProps {
   user: User | null;
   onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error', message?: string }>;
@@ -11,6 +14,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
+  const [allowManualEntry, setAllowManualEntry] = useState(false);
+  const [manualEmail, setManualEmail] = useState('');
   
   const activationAttempted = useRef(false);
 
@@ -49,7 +54,19 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
            setStatus('error');
            setErrorMessage(err.message || 'Unexpected error occurred.');
       }
-  }, [onActivate]);
+    }, [onActivate]);
+
+    useEffect(() => {
+        if (status !== 'loading' || allowManualEntry || typeof window === 'undefined') return;
+        const timerId = window.setTimeout(() => setAllowManualEntry(true), MANUAL_ENTRY_DELAY_MS);
+        return () => window.clearTimeout(timerId);
+    }, [status, allowManualEntry]);
+
+    useEffect(() => {
+        if (status === 'error' || status === 'rate_limited') {
+            setAllowManualEntry(true);
+        }
+    }, [status]);
 
   useEffect(() => {
     if (activationAttempted.current) return;
@@ -61,19 +78,21 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
           console.warn('[PaymentSuccessPage] Unable to access localStorage', storageErr);
       }
 
-      const pendingEmail = storedEmail || user?.email;
-      if (!pendingEmail) {
-          console.log('[PaymentSuccessPage] No email found in storage or user object');
-          setStatus('error');
-          setErrorMessage('Could not find account details. Please contact support.');
-          return;
-      }
+        const pendingEmail = storedEmail || user?.email;
+        const normalizedPendingEmail = pendingEmail ? normalizeEmail(pendingEmail) : '';
+        if (!normalizedPendingEmail) {
+            console.log('[PaymentSuccessPage] No email found in storage or user object');
+            setAllowManualEntry(true);
+            setStatus('error');
+            setErrorMessage('Could not find account details. Enter the email you used at checkout to finish activation.');
+            return;
+        }
 
-    setTargetEmail(pendingEmail);
+      setTargetEmail(normalizedPendingEmail);
     activationAttempted.current = true;
 
-      console.log('[PaymentSuccessPage] calling onActivate with', pendingEmail);
-      runActivation(pendingEmail);
+        console.log('[PaymentSuccessPage] calling onActivate with', normalizedPendingEmail);
+        runActivation(normalizedPendingEmail);
 
     }, [runActivation, user?.email]); 
 
@@ -82,6 +101,51 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         console.log('[PaymentSuccessPage] manual retry requested');
         runActivation(targetEmail);
     };
+
+  const handleManualSubmit = (event?: React.FormEvent<HTMLFormElement>) => {
+      if (event) event.preventDefault();
+      const cleanedManualEmail = normalizeEmail(manualEmail);
+      if (!cleanedManualEmail) {
+          setErrorMessage('Please enter a valid email address to retry activation.');
+          setStatus('error');
+          return;
+      }
+      try {
+          localStorage.setItem('pendingUpgradeEmail', cleanedManualEmail);
+      } catch (storageErr) {
+          console.warn('[PaymentSuccessPage] Unable to persist manual email', storageErr);
+      }
+      setTargetEmail(cleanedManualEmail);
+      setManualEmail(cleanedManualEmail);
+      console.log('[PaymentSuccessPage] manual email provided, re-running activation');
+      runActivation(cleanedManualEmail);
+  };
+
+  const renderManualEmailForm = (ctaLabel = 'Retry Activation') => (
+      <form onSubmit={handleManualSubmit} className="w-full mt-4 space-y-2">
+          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              Email you used at checkout
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all"
+              />
+              <button
+                  type="submit"
+                  disabled={!manualEmail.trim()}
+                  className="w-full sm:w-auto py-2.5 px-5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                  {ctaLabel}
+              </button>
+          </div>
+      </form>
+  );
 
   // --- UI STATES ---
 
@@ -92,9 +156,14 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600">
                      <AlertCircle size={32} />
                  </div>
-                 <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
-                 <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
-                <div className="flex flex-col gap-3">
+                   <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
+                   <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
+                   {allowManualEntry && (
+                       <div className="text-left">
+                           {renderManualEmailForm()}
+                       </div>
+                   )}
+                  <div className="flex flex-col gap-3 mt-6">
                     <button
                         onClick={handleRetry}
                         className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
@@ -221,6 +290,11 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             <p className="text-slate-400 text-sm mt-2">
                 Please wait while we unlock your unlimited access.
             </p>
+        )}
+        {status === 'loading' && allowManualEntry && (
+            <div className="w-full text-left mt-6">
+                {renderManualEmailForm('Retry Now')}
+            </div>
         )}
       </div>
     </div>
