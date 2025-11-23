@@ -11,56 +11,53 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
-  const [showManualButton, setShowManualButton] = useState(false);
   
   const activationAttempted = useRef(false);
 
   useEffect(() => {
-    // Show manual button after 4 seconds if things are taking a while
-    const manualButtonTimer = setTimeout(() => setShowManualButton(true), 4000);
-    return () => clearTimeout(manualButtonTimer);
-  }, []);
-
-  useEffect(() => {
     if (activationAttempted.current) return;
-    activationAttempted.current = true;
-
+    
     const pendingEmail = localStorage.getItem('pendingUpgradeEmail') || user?.email;
     if (!pendingEmail) {
+      console.log('[PaymentSuccessPage] No email found in storage or user object');
       setStatus('error');
-      setErrorMessage('Could not find account details in browser storage. Please contact support.');
+      setErrorMessage('Could not find account details. Please contact support.');
       return;
     }
+
     setTargetEmail(pendingEmail);
+    activationAttempted.current = true;
 
-    (async () => {
-      try {
-        const res = await onActivate(pendingEmail);
-        if (res.result === 'success') {
-          setStatus('success');
-          // Strict success redirect
-          setTimeout(() => (window.location.href = '/'), 1000);
-        } else if (res.result === 'existing_user') {
-          setStatus('existing_user');
-        } else if (res.result === 'email_confirmation_required') {
-          setStatus('email_confirmation_required');
-        } else {
-          // 'error'
-          setStatus('error');
-          setErrorMessage(res.message || 'We could not activate your account automatically. Please try logging in or contact support.');
+    const executeActivation = async () => {
+        console.log('[PaymentSuccessPage] calling onActivate with', pendingEmail);
+        try {
+            const response = await onActivate(pendingEmail);
+            console.log('[PaymentSuccessPage] onActivate response', response);
+
+            if (response.result === 'success') {
+                setStatus('success');
+                // Strict success redirect
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else if (response.result === 'existing_user') {
+                setStatus('existing_user');
+            } else if (response.result === 'email_confirmation_required') {
+                setStatus('email_confirmation_required');
+            } else {
+                setStatus('error');
+                setErrorMessage(response.message || 'Activation failed.');
+            }
+        } catch (err: any) {
+             console.error('[PaymentSuccessPage] Error calling onActivate', err);
+             setStatus('error');
+             setErrorMessage(err.message || 'Unexpected error occurred.');
         }
-      } catch (err: any) {
-        console.error('Activation exception', err);
-        setStatus('error');
-        setErrorMessage(err.message || 'Unexpected error while activating your account.');
-      }
-    })();
-  }, [onActivate, user?.email]); 
+    };
 
-  const handleManualContinue = () => {
-      // Manual escape hatch
-      window.location.href = '/';
-  };
+    executeActivation();
+
+  }, [onActivate, user?.email]); 
 
   // --- UI STATES ---
 
@@ -73,9 +70,9 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  </div>
                  <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
                  <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
-                 <button onClick={handleManualContinue} className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                 <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
-                 </button>
+                 </a>
              </div>
         </div>
       );
@@ -159,16 +156,6 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             <p className="text-slate-400 text-sm mt-2">
                 Please wait while we unlock your unlimited access.
             </p>
-        )}
-        
-        {/* Fail-safe manual button if auto-redirect hangs or is blocked */}
-        {showManualButton && status !== 'success' && (
-            <button 
-                onClick={handleManualContinue}
-                className="mt-6 text-sm font-bold text-indigo-600 hover:text-indigo-800 underline transition-colors animate-fade-in-up"
-            >
-                Taking too long? Click here to continue
-            </button>
         )}
       </div>
     </div>
