@@ -344,7 +344,9 @@ const App: React.FC = () => {
   };
 
   // PLG FLOW: Passwordless Activation
-  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
+  type ActivationResult = 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error';
+
+  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: ActivationResult, message?: string }> => {
       console.log('[activate] start', email);
 
       if (!supabase) {
@@ -398,7 +400,7 @@ const App: React.FC = () => {
         const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
         console.log('[activate] signUp start', { email, randomPassword });
 
-        const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
+      const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
             email, 
             password: randomPassword,
             options: {
@@ -408,16 +410,26 @@ const App: React.FC = () => {
 
         console.log('[activate] signUp result', { signUpData, signUpError });
 
-        if (signUpError) {
-            const msg = (signUpError.message || '').toLowerCase();
-            // Handle existing user
-            if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-                console.log('[activate] existing user case');
-                return { result: 'existing_user' };
-            }
-            console.error('[activate] signUp error (fatal)', signUpError);
-            throw signUpError;
-        }
+      if (signUpError) {
+          const msg = (signUpError.message || '').toLowerCase();
+          const code = typeof signUpError.code === 'string' ? signUpError.code.toLowerCase() : '';
+          
+          if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
+              console.log('[activate] existing user case');
+              return { result: 'existing_user' };
+          }
+
+          if (signUpError.status === 429 || msg.includes('rate limit') || code === 'over_email_send_rate_limit') {
+              console.warn('[activate] rate limit encountered on signUp');
+              return { 
+                  result: 'rate_limited',
+                  message: 'We just sent a confirmation email. Please wait a minute before retrying the activation.'
+              };
+          }
+
+          console.error('[activate] signUp error (fatal)', signUpError);
+          throw signUpError;
+      }
 
         // Handle Email Confirmation Required (User returned but no Session)
         // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
@@ -451,11 +463,11 @@ const App: React.FC = () => {
         console.log('[activate] DONE (new signup)');
         return { result: 'success' };
 
-      } catch (err: any) {
-          console.error('[activate] UNHANDLED ERROR', err);
-          return { result: 'existing_user' }; 
-      }
-  }, [fetchUserProfile]);
+    } catch (err: any) {
+        console.error('[activate] UNHANDLED ERROR', err);
+        return { result: 'error', message: err?.message || 'Activation failed. Please try again or contact support.' }; 
+    }
+}, [fetchUserProfile]);
 
   const handleLogout = async () => {
       if (supabase) {

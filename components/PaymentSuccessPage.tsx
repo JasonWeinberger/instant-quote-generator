@@ -1,63 +1,87 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Check, Loader2, AlertCircle, ArrowRight, LogIn, Mail } from 'lucide-react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Check, Loader2, AlertCircle, ArrowRight, LogIn, Mail, RefreshCcw } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }>;
+  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error', message?: string }>;
 }
 
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
   
   const activationAttempted = useRef(false);
 
+  const runActivation = useCallback(async (emailToActivate: string) => {
+      setStatus('loading');
+      setErrorMessage(null);
+
+      try {
+          const response = await onActivate(emailToActivate);
+          console.log('[PaymentSuccessPage] onActivate response', response);
+
+          switch (response.result) {
+              case 'success':
+                  setStatus('success');
+                  setTimeout(() => {
+                      window.location.href = '/';
+                  }, 1000);
+                  break;
+              case 'existing_user':
+                  setStatus('existing_user');
+                  break;
+              case 'email_confirmation_required':
+                  setStatus('email_confirmation_required');
+                  break;
+              case 'rate_limited':
+                  setStatus('rate_limited');
+                  setErrorMessage(response.message || 'We just emailed you a confirmation link. Please wait about a minute before trying again.');
+                  break;
+              default:
+                  setStatus('error');
+                  setErrorMessage(response.message || 'Activation failed.');
+                  break;
+          }
+      } catch (err: any) {
+           console.error('[PaymentSuccessPage] Error calling onActivate', err);
+           setStatus('error');
+           setErrorMessage(err.message || 'Unexpected error occurred.');
+      }
+  }, [onActivate]);
+
   useEffect(() => {
     if (activationAttempted.current) return;
     
-    const pendingEmail = localStorage.getItem('pendingUpgradeEmail') || user?.email;
-    if (!pendingEmail) {
-      console.log('[PaymentSuccessPage] No email found in storage or user object');
-      setStatus('error');
-      setErrorMessage('Could not find account details. Please contact support.');
-      return;
-    }
+      let storedEmail: string | null = null;
+      try {
+          storedEmail = localStorage.getItem('pendingUpgradeEmail');
+      } catch (storageErr) {
+          console.warn('[PaymentSuccessPage] Unable to access localStorage', storageErr);
+      }
+
+      const pendingEmail = storedEmail || user?.email;
+      if (!pendingEmail) {
+          console.log('[PaymentSuccessPage] No email found in storage or user object');
+          setStatus('error');
+          setErrorMessage('Could not find account details. Please contact support.');
+          return;
+      }
 
     setTargetEmail(pendingEmail);
     activationAttempted.current = true;
 
-    const executeActivation = async () => {
-        console.log('[PaymentSuccessPage] calling onActivate with', pendingEmail);
-        try {
-            const response = await onActivate(pendingEmail);
-            console.log('[PaymentSuccessPage] onActivate response', response);
+      console.log('[PaymentSuccessPage] calling onActivate with', pendingEmail);
+      runActivation(pendingEmail);
 
-            if (response.result === 'success') {
-                setStatus('success');
-                // Strict success redirect
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 1000);
-            } else if (response.result === 'existing_user') {
-                setStatus('existing_user');
-            } else if (response.result === 'email_confirmation_required') {
-                setStatus('email_confirmation_required');
-            } else {
-                setStatus('error');
-                setErrorMessage(response.message || 'Activation failed.');
-            }
-        } catch (err: any) {
-             console.error('[PaymentSuccessPage] Error calling onActivate', err);
-             setStatus('error');
-             setErrorMessage(err.message || 'Unexpected error occurred.');
-        }
+    }, [runActivation, user?.email]); 
+
+    const handleRetry = () => {
+        if (!targetEmail) return;
+        console.log('[PaymentSuccessPage] manual retry requested');
+        runActivation(targetEmail);
     };
-
-    executeActivation();
-
-  }, [onActivate, user?.email]); 
 
   // --- UI STATES ---
 
@@ -70,9 +94,17 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  </div>
                  <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
                  <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
-                 <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
-                     Return Home
-                 </a>
+                <div className="flex flex-col gap-3">
+                    <button
+                        onClick={handleRetry}
+                        className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
+                    >
+                        <RefreshCcw size={18} /> Retry Activation
+                    </button>
+                    <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                        Return Home
+                    </a>
+                </div>
              </div>
         </div>
       );
@@ -99,6 +131,39 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
         </div>
       );
   }
+
+    if (status === 'rate_limited') {
+        return (
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+               <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-amber-200">
+                   <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-600">
+                       <AlertCircle size={32} />
+                   </div>
+                   <h2 className="text-2xl font-bold text-slate-900 mb-2">We Need a Minute</h2>
+                   <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                      Stripe let us know you paid, but Supabase asked us to slow down on sending confirmation links.<br/><br/>
+                      Check your inbox for <strong>{targetEmail}</strong> or retry in about a minute.
+                      {errorMessage && (
+                        <>
+                          <br/><br/>{errorMessage}
+                        </>
+                      )}
+                   </p>
+                   <div className="flex flex-col gap-3">
+                       <button
+                           onClick={handleRetry}
+                           className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
+                       >
+                           <RefreshCcw size={18} /> Try Again
+                       </button>
+                       <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                           Return Home
+                       </a>
+                   </div>
+               </div>
+          </div>
+        );
+    }
 
   if (status === 'existing_user') {
       return (
