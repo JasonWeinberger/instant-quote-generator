@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1_F__-DJirkgwiuUAxN7Sln
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Set the `GEMINI_API_KEY` (or legacy `API_KEY`) in [.env.local](.env.local) to your Gemini API key
 3. (Optional but recommended) Set `VITE_PUBLIC_SITE_URL` to the fully-qualified origin where this app is hosted (e.g. `https://instantquotegenerator.com`). This is used when generating Supabase password reset links so that emails always point to a reachable, trusted URL.
 4. Run the app:
    `npm run dev`
