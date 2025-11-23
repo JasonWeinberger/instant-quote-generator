@@ -18,10 +18,11 @@
     "esModuleInterop": true,
     "types": ["vite/client"]
   },
-  "include": ["**/*.ts", "**/*.tsx", "vite-env.d.ts"],
+  "include": ["src/**/*", "vite-env.d.ts"],
   "exclude": [
     "node_modules",
     "vite.config.ts",
+    "supabase/functions",
     "supabase/functions/**/*"
   ]
 }
