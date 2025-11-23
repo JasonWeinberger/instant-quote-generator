@@ -1,14 +1,14 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Check, Loader2, AlertCircle, ArrowRight, LogIn } from 'lucide-react';
+import { Check, Loader2, AlertCircle, ArrowRight, LogIn, Mail } from 'lucide-react';
 import { User } from '../shared-types';
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'error' }>;
+  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }>;
 }
 
 export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user'>('loading');
+  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
   const [showManualButton, setShowManualButton] = useState(false);
@@ -28,7 +28,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
     const pendingEmail = localStorage.getItem('pendingUpgradeEmail') || user?.email;
     if (!pendingEmail) {
       setStatus('error');
-      setErrorMessage('Could not find account details. Please contact support.');
+      setErrorMessage('Could not find account details in browser storage. Please contact support.');
       return;
     }
     setTargetEmail(pendingEmail);
@@ -42,15 +42,17 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
           setTimeout(() => (window.location.href = '/'), 1000);
         } else if (res.result === 'existing_user') {
           setStatus('existing_user');
+        } else if (res.result === 'email_confirmation_required') {
+          setStatus('email_confirmation_required');
         } else {
           // 'error'
           setStatus('error');
-          setErrorMessage('We could not activate your account automatically. Please try logging in or contact support.');
+          setErrorMessage(res.message || 'We could not activate your account automatically. Please try logging in or contact support.');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Activation exception', err);
         setStatus('error');
-        setErrorMessage('Unexpected error while activating your account.');
+        setErrorMessage(err.message || 'Unexpected error while activating your account.');
       }
     })();
   }, [onActivate, user?.email]); 
@@ -74,6 +76,28 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
                  <button onClick={handleManualContinue} className="block w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
                      Return Home
                  </button>
+             </div>
+        </div>
+      );
+  }
+
+  if (status === 'email_confirmation_required') {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-slate-200">
+                 <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600">
+                     <Mail size={32} />
+                 </div>
+                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
+                 <p className="text-slate-500 mb-6 text-sm leading-relaxed">
+                    Your account has been created!<br/>
+                    We sent a confirmation link to <strong>{targetEmail}</strong>.
+                    <br/><br/>
+                    Please check your inbox (and spam folder) to verify your email and access your Pro account.
+                 </p>
+                 <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+                     Return to Home <ArrowRight size={16} />
+                 </a>
              </div>
         </div>
       );

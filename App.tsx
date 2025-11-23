@@ -121,14 +121,11 @@ const App: React.FC = () => {
 
   // Initialize
   useEffect(() => {
-    // Safer check for API Key that won't crash if process is undefined
-    try {
-        if (!process.env.API_KEY) {
-            setApiKeyMissing(true);
-        }
-    } catch (e) {
-        // Fallback if process check fails
-        console.warn("Could not check API key environment variable");
+    // Check for API Key
+    // process.env.API_KEY is replaced by Vite with the actual string value or undefined at build time
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        setApiKeyMissing(true);
     }
 
     const storedCount = localStorage.getItem('quoteUsageCount');
@@ -347,88 +344,8 @@ const App: React.FC = () => {
   };
 
   // PLG FLOW: Passwordless Activation
-  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'error' }> => {
-      if (supabase) {
-          const client = supabase!;
-          console.log("Starting activation for:", email);
-
-          try {
-            // 1) Check existing session
-            const { data: sessionData, error: sessionError } = await client.auth.getSession();
-            if (sessionError) {
-              console.error('getSession error', sessionError);
-            }
-
-            if (sessionData.session) {
-                // update metadata + users table, then return success
-                try {
-                    await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-                    await client.from('users').upsert({ 
-                        id: sessionData.session.user.id,
-                        email: sessionData.session.user.email,
-                        status: 'active', 
-                        plan: 'pro',
-                        updated_at: new Date().toISOString()
-                    });
-                    
-                    await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-                    localStorage.removeItem('pendingUpgradeEmail');
-                    return { result: 'success' };
-                } catch (e) {
-                    console.error("Upsert/Update failed for existing session", e);
-                    return { result: 'error' };
-                }
-            }
-
-            // 2) Try signUp with random password
-            const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-            const { data, error } = await client.auth.signUp({ 
-                email, 
-                password: randomPassword,
-                options: {
-                    data: { status: 'active', plan: 'pro' }
-                }
-            });
-
-            if (error) {
-                console.error('signUp error', error);
-                const msg = (error.message || '').toLowerCase();
-                const isAlreadyRegistered = msg.includes('already') || msg.includes('exists') || error.status === 422;
-                if (isAlreadyRegistered) {
-                    return { result: 'existing_user' };
-                }
-                // For ANY other error, return error and DO NOT redirect
-                return { result: 'error' };
-            }
-
-            if (!data?.user || !data.session) {
-                console.error('signUp returned no session or no user', data);
-                return { result: 'error' };
-            }
-
-            // 3) Upsert Pro user row
-            try {
-                await client.from('users').upsert({ 
-                    id: data.user.id, 
-                    email: email,
-                    status: 'active',
-                    plan: 'pro',
-                    updated_at: new Date().toISOString()
-                });
-                await fetchUserProfile(data.user.id, email);
-                localStorage.removeItem('pendingUpgradeEmail'); 
-                return { result: 'success' };
-            } catch (e) {
-                console.error("Upsert failed for new user", e);
-                return { result: 'error' };
-            }
-
-          } catch (e) {
-              console.error("Activation exception:", e);
-              return { result: 'error' };
-          }
-
-      } else {
+  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
+      if (!supabase) {
           // DEMO MODE
           const newUser: User = {
               id: `local_paid_${Date.now()}`,
@@ -441,6 +358,93 @@ const App: React.FC = () => {
           localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
           setShowPaywallModal(false);
           return { result: 'success' };
+      }
+
+      const client = supabase!;
+      console.log("Starting activation for:", email);
+
+      try {
+        // 1) Check existing session
+        const { data: sessionData } = await client.auth.getSession();
+        
+        if (sessionData.session) {
+            try {
+                // Upgrade existing session
+                await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+                await client.from('users').upsert({ 
+                    id: sessionData.session.user.id,
+                    email: sessionData.session.user.email,
+                    status: 'active', 
+                    plan: 'pro',
+                    updated_at: new Date().toISOString()
+                });
+                
+                await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+                localStorage.removeItem('pendingUpgradeEmail');
+                return { result: 'success' };
+            } catch (e: any) {
+                console.error("Upsert/Update failed for existing session", e);
+                return { result: 'error', message: e.message || 'Failed to update existing account.' };
+            }
+        }
+
+        // 2) Try signUp with random password
+        const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+        const { data, error } = await client.auth.signUp({ 
+            email, 
+            password: randomPassword,
+            options: {
+                data: { status: 'active', plan: 'pro' }
+            }
+        });
+
+        if (error) {
+            console.error('signUp error', error);
+            const msg = (error.message || '').toLowerCase();
+            const isAlreadyRegistered = 
+                msg.includes('already') || 
+                msg.includes('exists') || 
+                msg.includes('registered') ||
+                error.status === 422 || 
+                error.status === 400;
+            
+            if (isAlreadyRegistered) {
+                return { result: 'existing_user' };
+            }
+            return { result: 'error', message: error.message };
+        }
+
+        // 3) Handle Email Confirmation Flow
+        // If user is returned but no session, it implies email confirmation is required by Supabase settings
+        if (data.user && !data.session) {
+            return { result: 'email_confirmation_required' };
+        }
+
+        if (!data.user || !data.session) {
+            return { result: 'error', message: 'Sign up failed to return a valid session.' };
+        }
+
+        // 4) Upsert Pro user row (Authenticated)
+        try {
+            await client.from('users').upsert({ 
+                id: data.user.id, 
+                email: email,
+                status: 'active',
+                plan: 'pro',
+                updated_at: new Date().toISOString()
+            });
+            await fetchUserProfile(data.user.id, email);
+            localStorage.removeItem('pendingUpgradeEmail'); 
+            return { result: 'success' };
+        } catch (e: any) {
+            console.error("Upsert failed for new user", e);
+            // Return error to alert user, even if Auth succeeded, to avoid "ghost" accounts
+            return { result: 'error', message: "Account created, but profile sync failed: " + e.message };
+        }
+
+      } catch (e: any) {
+          console.error("Activation exception:", e);
+          return { result: 'error', message: e.message || 'Unknown activation error.' };
       }
   }, [fetchUserProfile]);
 
