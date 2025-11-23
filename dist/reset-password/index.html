@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirecting…</title>
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content="0; url=/" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+    </style>
+    <script>
+      (function () {
+        try {
+          var target = new URL(window.location.origin + '/');
+          var params = new URLSearchParams(window.location.search);
+          if (!params.has('auth')) {
+            params.set('auth', 'recovery');
+          }
+          if ([...params.keys()].length > 0) {
+            target.search = params.toString();
+          }
+          if (window.location.hash) {
+            target.hash = window.location.hash;
+          }
+          window.location.replace(target.toString());
+        } catch (err) {
+          console.error('Redirect failed', err);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Redirecting you to the secure reset page…</p>
+  </body>
+</html>

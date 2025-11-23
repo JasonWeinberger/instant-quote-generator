@@ -14,6 +14,34 @@ import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight
 
 const MAX_FREE_QUOTES = 3;
 
+const isRecoveryUrl = () => {
+  if (typeof window === 'undefined') return false;
+  const { pathname, search, hash } = window.location;
+  return (
+    pathname === '/reset-password' ||
+    search.includes('type=recovery') ||
+    search.includes('auth=recovery') ||
+    hash.includes('type=recovery')
+  );
+};
+
+const getRecoveryRedirectUrl = () => {
+  const envUrl = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.trim();
+  if (envUrl) {
+    const configuredUrl = new URL(envUrl);
+    configuredUrl.searchParams.set('auth', 'recovery');
+    return configuredUrl.toString();
+  }
+
+  if (typeof window !== 'undefined') {
+    const fallbackUrl = new URL(window.location.origin);
+    fallbackUrl.searchParams.set('auth', 'recovery');
+    return fallbackUrl.toString();
+  }
+
+  return '';
+};
+
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_password';
@@ -55,16 +83,7 @@ const App: React.FC = () => {
 
   // Check for Reset Password URL on Mount
   useEffect(() => {
-    const path = window.location.pathname;
-    const search = window.location.search;
-    const hash = window.location.hash;
-
-    const isRecovery = 
-        path === '/reset-password' || 
-        search.includes('type=recovery') || 
-        hash.includes('type=recovery');
-
-    if (isRecovery) {
+    if (isRecoveryUrl()) {
         setCurrentView('reset_password');
     }
   }, []);
@@ -154,17 +173,16 @@ const App: React.FC = () => {
 
     const client = supabase!;
 
-    client.auth.getSession().then(async ({ data: { session } }) => {
-        if (session) {
-            const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
-            if (!isRecovery) {
+      client.auth.getSession().then(async ({ data: { session } }) => {
+          if (session) {
+              if (!isRecoveryUrl()) {
                 await fetchUserProfile(session.user.id, session.user.email || '');
             }
         }
     });
     
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+          const isRecovery = isRecoveryUrl();
 
         if (event === 'PASSWORD_RECOVERY' || isRecovery) {
             setCurrentView('reset_password');
@@ -332,15 +350,17 @@ const App: React.FC = () => {
       }
   };
 
-  const handleResetPassword = async (email: string) => {
-      if (supabase) {
-          const client = supabase!;
-          const { error } = await client.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/reset-password`,
-          });
-          if (error) throw error;
-      }
-  };
+    const handleResetPassword = async (email: string) => {
+        if (supabase) {
+            const client = supabase!;
+            const redirectTo = getRecoveryRedirectUrl() || undefined;
+
+            const { error } = await client.auth.resetPasswordForEmail(email, {
+                redirectTo,
+            });
+            if (error) throw error;
+        }
+    };
 
   const handleUpdatePassword = async (password: string) => {
       if (supabase) {
@@ -435,11 +455,10 @@ const App: React.FC = () => {
             const msg = (signUpError.message || '').toLowerCase();
             const code = typeof signUpError.code === 'string' ? signUpError.code.toLowerCase() : '';
             
-            if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-                console.log('[activate] existing user case - sending OTP login');
-                const otpOptions = typeof window !== 'undefined'
-                    ? { emailRedirectTo: `${window.location.origin}/reset-password` }
-                    : {};
+              if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
+                  console.log('[activate] existing user case - sending OTP login');
+                  const recoveryRedirect = getRecoveryRedirectUrl();
+                  const otpOptions = recoveryRedirect ? { emailRedirectTo: recoveryRedirect } : {};
 
                 const { error: otpError } = await client.auth.signInWithOtp({
                     email: targetEmail,
