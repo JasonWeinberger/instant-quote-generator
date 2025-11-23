@@ -7,10 +7,11 @@ const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (email: string) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error', message?: string }>;
+  stripeSessionId?: string | null;
+  onActivate: (input: { email: string; stripeSessionId?: string | null }) => Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error', message?: string, normalizedEmail?: string }>;
 }
 
-export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
+export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, stripeSessionId, onActivate }) => {
   const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
@@ -24,8 +25,11 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
       setErrorMessage(null);
 
       try {
-          const response = await onActivate(emailToActivate);
+            const response = await onActivate({ email: emailToActivate, stripeSessionId });
           console.log('[PaymentSuccessPage] onActivate response', response);
+            if (response.normalizedEmail) {
+                setTargetEmail(response.normalizedEmail);
+            }
 
           switch (response.result) {
               case 'success':
@@ -53,8 +57,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
            console.error('[PaymentSuccessPage] Error calling onActivate', err);
            setStatus('error');
            setErrorMessage(err.message || 'Unexpected error occurred.');
-      }
-    }, [onActivate]);
+        }
+      }, [onActivate, stripeSessionId]);
 
     useEffect(() => {
         if (status !== 'loading' || allowManualEntry || typeof window === 'undefined') return;
