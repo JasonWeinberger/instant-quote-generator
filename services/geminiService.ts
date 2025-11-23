@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { QuoteResult, Industry } from "../shared-types";
+import { getGeminiApiKey } from "../lib/env";
 
 const quoteSchema = {
   type: Type.OBJECT,
@@ -30,7 +31,11 @@ const quoteSchema = {
 
 export const generateQuote = async (industry: Industry, jobDescription: string, zipCode: string): Promise<QuoteResult> => {
   // Initialize client inside function to prevent top-level crash if API key is missing at load time
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const geminiApiKey = getGeminiApiKey();
+  if (!geminiApiKey) {
+    throw new Error("Missing Gemini API key. Set GEMINI_API_KEY or API_KEY in your environment variables.");
+  }
+  const ai = new GoogleGenAI({ apiKey: geminiApiKey });
 
   const locationString = zipCode ? `for Zip Code: ${zipCode}` : "based on US National Averages";
 

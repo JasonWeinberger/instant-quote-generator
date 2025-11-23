@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { generateQuote } from './services/geminiService';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { isGeminiConfigured } from './lib/env';
 import { Industry, QuoteResult, HistoryItem, User } from './shared-types';
 import { IndustrySelector } from './components/IndustrySelector';
 import { QuoteResultCard } from './components/QuoteResultCard';
@@ -72,8 +73,8 @@ const App: React.FC = () => {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [apiKeyMissing, setApiKeyMissing] = useState(false);
-  
+  const [apiKeyMissing, setApiKeyMissing] = useState(!isGeminiConfigured());
+
   // Email Capture State
   const [showEmailModal, setShowEmailModal] = useState(false);
 
@@ -142,12 +143,8 @@ const App: React.FC = () => {
 
   // Initialize
   useEffect(() => {
-    // Check for API Key
-    // process.env.API_KEY is replaced by Vite with the actual string value or undefined at build time
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        setApiKeyMissing(true);
-    }
+      // Check for API Key (Vite replaces env references at build-time)
+      setApiKeyMissing(!isGeminiConfigured());
 
     const storedCount = localStorage.getItem('quoteUsageCount');
     if (storedCount) setUsageCount(parseInt(storedCount, 10));
