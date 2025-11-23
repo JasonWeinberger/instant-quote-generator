@@ -13,6 +13,15 @@ import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Hammer, Wrench, Check } from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
+const PASSWORD_RESET_QUERY_KEY = 'auth';
+const PASSWORD_RESET_QUERY_VALUE = 'reset-password';
+
+const buildResetPasswordRedirectUrl = () => {
+  if (typeof window === 'undefined') return undefined;
+  const url = new URL(window.location.origin);
+  url.searchParams.set(PASSWORD_RESET_QUERY_KEY, PASSWORD_RESET_QUERY_VALUE);
+  return url.toString();
+};
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
@@ -54,20 +63,23 @@ const App: React.FC = () => {
   const featuresRef = useRef<HTMLDivElement>(null);
 
   // Check for Reset Password URL on Mount
-  useEffect(() => {
-    const path = window.location.pathname;
-    const search = window.location.search;
-    const hash = window.location.hash;
-
-    const isRecovery = 
-        path === '/reset-password' || 
-        search.includes('type=recovery') || 
-        hash.includes('type=recovery');
-
-    if (isRecovery) {
-        setCurrentView('reset_password');
-    }
-  }, []);
+    useEffect(() => {
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      const searchParams = new URLSearchParams(search);
+      const queryRequestsRecovery = searchParams.get(PASSWORD_RESET_QUERY_KEY) === PASSWORD_RESET_QUERY_VALUE;
+  
+      const isRecovery = 
+          path === '/reset-password' || 
+          search.includes('type=recovery') || 
+          hash.includes('type=recovery') ||
+          queryRequestsRecovery;
+  
+      if (isRecovery) {
+          setCurrentView('reset_password');
+      }
+    }, []);
 
   // Memoize fetchUserProfile
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
@@ -332,15 +344,16 @@ const App: React.FC = () => {
       }
   };
 
-  const handleResetPassword = async (email: string) => {
-      if (supabase) {
-          const client = supabase!;
-          const { error } = await client.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/reset-password`,
-          });
-          if (error) throw error;
-      }
-  };
+    const handleResetPassword = async (email: string) => {
+        if (supabase) {
+            const client = supabase!;
+            const redirectTo = buildResetPasswordRedirectUrl();
+            const { error } = await client.auth.resetPasswordForEmail(email, {
+                redirectTo: redirectTo ?? undefined,
+            });
+            if (error) throw error;
+        }
+    };
 
   const handleUpdatePassword = async (password: string) => {
       if (supabase) {

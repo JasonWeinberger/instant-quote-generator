@@ -54,31 +54,38 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onAuth, onResetPassword, o
     }
   };
 
-  if (resetSent) {
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 animate-fade-in-up">
-             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
-                     <Check size={32} />
-                 </div>
-                 <h2 className="text-2xl font-bold text-slate-900 mb-2">Reset Link Sent</h2>
-                 <p className="text-slate-500 mb-8">
-                     We've sent a password reset link to <strong>{email}</strong>.
-                 </p>
-                 <button
-                    onClick={() => {
-                        setResetSent(false);
-                        setAuthMode('signin');
-                        setError(null);
-                    }}
-                    className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
-                 >
-                     Return to Sign In
-                 </button>
-             </div>
-        </div>
-      );
-  }
+    if (resetSent) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 animate-fade-in-up">
+               <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center space-y-6">
+                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto text-green-600">
+                       <Check size={32} />
+                   </div>
+                   <div>
+                       <h2 className="text-2xl font-bold text-slate-900 mb-2">Reset Link Sent</h2>
+                       <p className="text-slate-500">
+                           We've emailed a secure password reset link to <strong>{email}</strong>.
+                       </p>
+                   </div>
+                   <div className="text-left text-sm text-slate-500 bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-2">
+                       <p>Check your Spam or Promotions folder and mark the message as <strong>Not spam</strong> to keep future emails in your inbox.</p>
+                       <p>Add <strong>support@instantquotegenerator.com</strong> to your contacts so Gmail/Outlook trusts the message.</p>
+                       <p>Still can't find it? <a href="mailto:support@instantquotegenerator.com?subject=Password%20reset%20help" className="text-indigo-600 font-semibold hover:underline">Contact support</a> and we’ll resend it from our desk.</p>
+                   </div>
+                   <button
+                      onClick={() => {
+                          setResetSent(false);
+                          setAuthMode('signin');
+                          setError(null);
+                      }}
+                      className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+                   >
+                       Return to Sign In
+                   </button>
+               </div>
+          </div>
+        );
+    }
 
   return (
     <div className="min-h-screen flex bg-white animate-fade-in-up">
