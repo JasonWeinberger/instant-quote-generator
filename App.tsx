@@ -10,11 +10,27 @@ import { PaymentSuccessPage } from './components/PaymentSuccessPage';
 import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { STRIPE_LINKS } from './constants';
-import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Hammer, Wrench, Check } from 'lucide-react';
+import {
+  Loader2,
+  AlertCircle,
+  Zap,
+  History,
+  LayoutTemplate,
+  Menu,
+  X,
+  ArrowRight,
+  MapPin,
+  Hammer,
+  Wrench,
+  Check,
+} from 'lucide-react';
 
 const MAX_FREE_QUOTES = 3;
 
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_password';
+
+// Guard to avoid double-running auth callback in React Strict Mode
+let hasHandledAuthCallback = false;
 
 const BrandLogo: React.FC = () => (
   <div className="relative w-11 h-11 bg-[#003366] rounded-full flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-white ring-1 ring-slate-900/10">
@@ -44,7 +60,7 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
-  // 🔹 Close mobile nav whenever we change views (login, billing, landing, etc.)
+  // Close mobile nav whenever we change views (login, billing, landing, etc.)
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [currentView]);
@@ -79,7 +95,7 @@ const App: React.FC = () => {
     try {
       const [authResponse, dbResponse] = await Promise.all([
         client.auth.getUser(),
-        client.from('users').select('*').eq('id', userId).maybeSingle()
+        client.from('users').select('*').eq('id', userId).maybeSingle(),
       ]);
 
       const authUser = authResponse.data.user;
@@ -102,9 +118,11 @@ const App: React.FC = () => {
             company_name: dbData?.company_name || authMetadata.company_name,
             company_phone: dbData?.company_phone,
             company_address: dbData?.company_address,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           });
-        } catch (e) { console.warn("DB sync error", e); }
+        } catch (e) {
+          console.warn('DB sync error', e);
+        }
       }
 
       const u: User = {
@@ -115,13 +133,58 @@ const App: React.FC = () => {
         trialStartDate: dbData?.created_at ? new Date(dbData.created_at).getTime() : Date.now(),
         companyName: dbData?.company_name,
         companyPhone: dbData?.company_phone,
-        companyAddress: dbData?.company_address
+        companyAddress: dbData?.company_address,
       };
       setUser(u);
     } catch (err) {
-      console.error("Error fetching profile:", err);
+      console.error('Error fetching profile:', err);
     }
   }, []);
+
+  // 🔹 Auto-login after email confirmation (signup only)
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
+      if (hasHandledAuthCallback) return;
+      hasHandledAuthCallback = true;
+
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
+
+      // Only auto-login for signup confirmation links from email
+      if (!code || type !== 'signup') return;
+
+      try {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+        if (error) {
+          console.error('[auth callback] exchangeCodeForSession error:', error);
+          return;
+        }
+
+        // Clean auth params from URL
+        url.searchParams.delete('code');
+        url.searchParams.delete('type');
+        window.history.replaceState({}, document.title, url.toString());
+
+        // Hydrate user/profile after successful session exchange
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('[auth callback] getUser error:', userError);
+          return;
+        }
+
+        if (userData?.user) {
+          await fetchUserProfile(userData.user.id, userData.user.email || '');
+        }
+      } catch (err) {
+        console.error('[auth callback] unexpected error:', err);
+      }
+    };
+
+    handleAuthCallback();
+  }, [fetchUserProfile]);
 
   // Initialize
   useEffect(() => {
@@ -138,7 +201,9 @@ const App: React.FC = () => {
     if (storedHistory) {
       try {
         setHistory(JSON.parse(storedHistory));
-      } catch (e) { console.error("Failed to parse history", e); }
+      } catch (e) {
+        console.error('Failed to parse history', e);
+      }
     }
 
     if (!isSupabaseConfigured() || !supabase) {
@@ -148,7 +213,9 @@ const App: React.FC = () => {
           const parsedUser: User = JSON.parse(storedUser);
           if (!parsedUser.id) parsedUser.id = 'local_' + Date.now();
           setUser(parsedUser);
-        } catch (e) { console.error("Failed to parse user", e); }
+        } catch (e) {
+          console.error('Failed to parse user', e);
+        }
       }
       return;
     }
@@ -157,15 +224,19 @@ const App: React.FC = () => {
 
     client.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
-        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+        const isRecovery =
+          window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
         if (!isRecovery) {
           await fetchUserProfile(session.user.id, session.user.email || '');
         }
       }
     });
 
-    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-      const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange(async (event, session) => {
+      const isRecovery =
+        window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
 
       if (event === 'PASSWORD_RECOVERY' || isRecovery) {
         setCurrentView('reset_password');
@@ -185,7 +256,7 @@ const App: React.FC = () => {
 
           if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
             await client.auth.updateUser({
-              data: { status: 'active', plan: 'pro' }
+              data: { status: 'active', plan: 'pro' },
             });
             try {
               await client.from('users').upsert({
@@ -193,10 +264,13 @@ const App: React.FC = () => {
                 email: sessionEmail,
                 status: 'active',
                 plan: 'pro',
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               });
-            } catch (e) { console.warn("Upsert failed", e); }
+            } catch (e) {
+              console.warn('Upsert failed', e);
+            }
             localStorage.removeItem('pendingUpgradeEmail');
+            localStorage.removeItem('pendingUpgradePassword');
           }
           await fetchUserProfile(session.user.id, session.user.email || '');
         }
@@ -221,14 +295,14 @@ const App: React.FC = () => {
     }
   }, [result]);
 
-  const isLimitReached = (user?.status !== 'active') && (usageCount >= MAX_FREE_QUOTES);
+  const isLimitReached = user?.status !== 'active' && usageCount >= MAX_FREE_QUOTES;
   const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
   const handleUpgradeClick = () => {
     setShowEmailModal(true);
   };
 
-  // UPDATED: now accepts email + password and stores both
+  // Accepts email + password and stores both
   const handleEmailSubmit = (email: string, password: string) => {
     localStorage.setItem('pendingUpgradeEmail', email);
     localStorage.setItem('pendingUpgradePassword', password);
@@ -243,15 +317,15 @@ const App: React.FC = () => {
     }
 
     if (apiKeyMissing) {
-      setError("API Key is missing. Please configure it in your deployment settings.");
+      setError('API Key is missing. Please configure it in your deployment settings.');
       return;
     }
     if (!zipCode.trim()) {
-      setError("Please enter a Zip Code.");
+      setError('Please enter a Zip Code.');
       return;
     }
     if (!jobDescription.trim()) {
-      setError("Please provide a job description.");
+      setError('Please provide a job description.');
       return;
     }
 
@@ -288,14 +362,14 @@ const App: React.FC = () => {
           industry: industry,
           job_description: jobDescription,
           zip_code: zipCode,
-          result: quoteData
+          result: quoteData,
         });
       }
 
       setResult(quoteData);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong generating the quote. Please try again.");
+      setError('Something went wrong generating the quote. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -309,7 +383,7 @@ const App: React.FC = () => {
       setCurrentView('landing');
     } else {
       // Demo Mode
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       const existingUserStr = localStorage.getItem(`user_${email}`);
       let userData: User;
       if (existingUserStr) {
@@ -320,7 +394,7 @@ const App: React.FC = () => {
           email,
           plan: 'pro',
           status: 'trial',
-          trialStartDate: Date.now()
+          trialStartDate: Date.now(),
         };
         localStorage.setItem(`user_${email}`, JSON.stringify(userData));
       }
@@ -348,124 +422,133 @@ const App: React.FC = () => {
     }
   };
 
-  // UPDATED: still takes email only from PaymentSuccessPage,
-  // but uses stored password from localStorage if available.
-  const handlePaymentSuccessActivation = useCallback(async (
-    email: string
-  ): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
-    console.log('[activate] start', email);
+  const handlePaymentSuccessActivation = useCallback(
+    async (
+      email: string
+    ): Promise<{
+      result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error';
+      message?: string;
+    }> => {
+      console.log('[activate] start', email);
 
-    if (!supabase) {
-      // DEMO MODE
-      const newUser: User = {
-        id: `local_paid_${Date.now()}`,
-        email: email,
-        plan: 'pro',
-        status: 'active',
-        trialStartDate: Date.now()
-      };
-      setUser(newUser);
-      localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-      setShowPaywallModal(false);
-      console.log('[activate] DONE (demo mode)');
-      return { result: 'success' };
-    }
+      if (!supabase) {
+        // DEMO MODE
+        const newUser: User = {
+          id: `local_paid_${Date.now()}`,
+          email: email,
+          plan: 'pro',
+          status: 'active',
+          trialStartDate: Date.now(),
+        };
+        setUser(newUser);
+        localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
+        setShowPaywallModal(false);
+        console.log('[activate] DONE (demo mode)');
+        return { result: 'success' };
+      }
 
-    const client = supabase!;
+      const client = supabase!;
 
-    try {
-      // A) Check existing session
-      const { data: sessionData, error: sessionError } = await client.auth.getSession();
-      console.log('[activate] getSession', { sessionData, sessionError });
+      try {
+        // A) Check existing session
+        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        console.log('[activate] getSession', { sessionData, sessionError });
 
-      if (sessionData?.session) {
-        console.log('[activate] already have session, upgrading user');
+        if (sessionData?.session) {
+          console.log('[activate] already have session, upgrading user');
 
-        await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+          await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
 
+          const { error: upsertError } = await client.from('users').upsert({
+            id: sessionData.session.user.id,
+            email: sessionData.session.user.email,
+            status: 'active',
+            plan: 'pro',
+            updated_at: new Date().toISOString(),
+          });
+
+          if (upsertError) {
+            console.error('[activate] upsert error (existing session)', upsertError);
+            throw upsertError;
+          }
+
+          await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+          localStorage.removeItem('pendingUpgradeEmail');
+          localStorage.removeItem('pendingUpgradePassword');
+          console.log('[activate] DONE (existing session)');
+          return { result: 'success' };
+        }
+
+        // B) Try sign-up using stored password (from upgrade modal) or random fallback
+        const storedPassword = localStorage.getItem('pendingUpgradePassword');
+        const passwordToUse =
+          storedPassword || `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+        console.log('[activate] signUp start', { email });
+
+        const { data: signUpData, error: signUpError } = await client.auth.signUp({
+          email,
+          password: passwordToUse,
+          options: {
+            data: { status: 'active', plan: 'pro' },
+          },
+        });
+
+        console.log('[activate] signUp result', { signUpData, signUpError });
+
+        if (signUpError) {
+          const msg = (signUpError.message || '').toLowerCase();
+          // Handle existing user
+          if (
+            msg.includes('already registered') ||
+            msg.includes('user already exists') ||
+            signUpError.status === 422 ||
+            signUpError.status === 400
+          ) {
+            console.log('[activate] existing user case');
+            return { result: 'existing_user' };
+          }
+          console.error('[activate] signUp error (fatal)', signUpError);
+          throw signUpError;
+        }
+
+        // Handle Email Confirmation Required (User returned but no Session)
+        if (signUpData.user && !signUpData.session) {
+          console.log('[activate] signUp successful but no session (email confirmation required)');
+          return { result: 'email_confirmation_required' };
+        }
+
+        if (!signUpData?.user || !signUpData.session) {
+          console.error('[activate] signUp returned no user or session', signUpData);
+          throw new Error('Signup returned no session');
+        }
+
+        // C) Upsert profile row (Authenticated)
         const { error: upsertError } = await client.from('users').upsert({
-          id: sessionData.session.user.id,
-          email: sessionData.session.user.email,
+          id: signUpData.user.id,
+          email: email,
           status: 'active',
           plan: 'pro',
           updated_at: new Date().toISOString(),
         });
+        console.log('[activate] upsert result', { upsertError });
 
         if (upsertError) {
-          console.error('[activate] upsert error (existing session)', upsertError);
+          console.error('[activate] upsert error', upsertError);
           throw upsertError;
         }
 
-        await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+        await fetchUserProfile(signUpData.user.id, email);
         localStorage.removeItem('pendingUpgradeEmail');
         localStorage.removeItem('pendingUpgradePassword');
-        console.log('[activate] DONE (existing session)');
+        console.log('[activate] DONE (new signup)');
         return { result: 'success' };
+      } catch (err: any) {
+        console.error('[activate] UNHANDLED ERROR', err);
+        return { result: 'existing_user' };
       }
-
-      // B) Try sign-up using stored password (from upgrade modal) or random fallback
-      const storedPassword = localStorage.getItem('pendingUpgradePassword');
-      const passwordToUse = storedPassword || `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-      console.log('[activate] signUp start', { email });
-
-      const { data: signUpData, error: signUpError } = await client.auth.signUp({
-        email,
-        password: passwordToUse,
-        options: {
-          data: { status: 'active', plan: 'pro' }
-        }
-      });
-
-      console.log('[activate] signUp result', { signUpData, signUpError });
-
-      if (signUpError) {
-        const msg = (signUpError.message || '').toLowerCase();
-        // Handle existing user
-        if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-          console.log('[activate] existing user case');
-          return { result: 'existing_user' };
-        }
-        console.error('[activate] signUp error (fatal)', signUpError);
-        throw signUpError;
-      }
-
-      // Handle Email Confirmation Required (User returned but no Session)
-      if (signUpData.user && !signUpData.session) {
-        console.log('[activate] signUp successful but no session (email confirmation required)');
-        return { result: 'email_confirmation_required' };
-      }
-
-      if (!signUpData?.user || !signUpData.session) {
-        console.error('[activate] signUp returned no user or session', signUpData);
-        throw new Error('Signup returned no session');
-      }
-
-      // C) Upsert profile row (Authenticated)
-      const { error: upsertError } = await client.from('users').upsert({
-        id: signUpData.user.id,
-        email: email,
-        status: 'active',
-        plan: 'pro',
-        updated_at: new Date().toISOString()
-      });
-      console.log('[activate] upsert result', { upsertError });
-
-      if (upsertError) {
-        console.error('[activate] upsert error', upsertError);
-        throw upsertError;
-      }
-
-      await fetchUserProfile(signUpData.user.id, email);
-      localStorage.removeItem('pendingUpgradeEmail');
-      localStorage.removeItem('pendingUpgradePassword');
-      console.log('[activate] DONE (new signup)');
-      return { result: 'success' };
-
-    } catch (err: any) {
-      console.error('[activate] UNHANDLED ERROR', err);
-      return { result: 'existing_user' };
-    }
-  }, [fetchUserProfile]);
+    },
+    [fetchUserProfile]
+  );
 
   const handleLogout = async () => {
     if (supabase) {
@@ -481,11 +564,14 @@ const App: React.FC = () => {
     setUser(updatedUser);
     if (supabase && user?.id) {
       const client = supabase!;
-      await client.from('users').update({
-        company_name: updatedUser.companyName,
-        company_phone: updatedUser.companyPhone,
-        company_address: updatedUser.companyAddress
-      }).eq('id', user.id);
+      await client
+        .from('users')
+        .update({
+          company_name: updatedUser.companyName,
+          company_phone: updatedUser.companyPhone,
+          company_address: updatedUser.companyAddress,
+        })
+        .eq('id', user.id);
     } else {
       localStorage.setItem('quoteGenUser', JSON.stringify(updatedUser));
     }
@@ -494,19 +580,18 @@ const App: React.FC = () => {
   // --- VIEWS ---
 
   if (currentView === 'reset_password') {
-    return <ResetPasswordPage onSuccess={() => {
-      window.history.replaceState(null, '', '/');
-      setCurrentView('landing');
-    }} />;
+    return (
+      <ResetPasswordPage
+        onSuccess={() => {
+          window.history.replaceState(null, '', '/');
+          setCurrentView('landing');
+        }}
+      />
+    );
   }
 
   if (currentView === 'payment_success') {
-    return (
-      <PaymentSuccessPage
-        user={user}
-        onActivate={handlePaymentSuccessActivation}
-      />
-    );
+    return <PaymentSuccessPage user={user} onActivate={handlePaymentSuccessActivation} />;
   }
 
   if (currentView === 'login') {
@@ -549,7 +634,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
-
       <EmailCaptureModal
         isOpen={showEmailModal}
         onClose={() => setShowEmailModal(false)}
@@ -560,36 +644,79 @@ const App: React.FC = () => {
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+            <div
+              className="flex items-center cursor-pointer"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
               <BrandLogo />
-              <span className="ml-3 font-bold text-xl tracking-tight text-slate-900">Instant <span className="text-indigo-600">Quote Generator</span></span>
+              <span className="ml-3 font-bold text-xl tracking-tight text-slate-900">
+                Instant <span className="text-indigo-600">Quote Generator</span>
+              </span>
             </div>
 
             <div className="hidden md:flex items-center space-x-8">
-              <button type="button" onClick={() => scrollToSection(featuresRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">How it works</button>
-              <button type="button" onClick={() => scrollToSection(pricingRef)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Pricing</button>
-              <button type="button" onClick={() => setShowHistoryModal(true)} className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => scrollToSection(featuresRef)}
+                className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors"
+              >
+                How it works
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection(pricingRef)}
+                className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors"
+              >
+                Pricing
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(true)}
+                className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors flex items-center gap-1"
+              >
                 <History size={16} /> History
               </button>
 
               {user ? (
-                <button type="button" onClick={() => setCurrentView('billing')} className="flex items-center gap-2 pl-4 border-l border-slate-200 hover:opacity-80 transition-opacity">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-transparent hover:ring-indigo-200 transition-all ${user.status === 'active' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-600'}`}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('billing')}
+                  className="flex items-center gap-2 pl-4 border-l border-slate-200 hover:opacity-80 transition-opacity"
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-transparent hover:ring-indigo-200 transition-all ${
+                      user.status === 'active'
+                        ? 'bg-indigo-100 text-indigo-700'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
                     {user.email.substring(0, 2).toUpperCase()}
                   </div>
                   <div className="flex flex-col items-start">
                     <span className="text-xs font-bold text-slate-900 leading-none">Account</span>
-                    <span className={`text-[10px] font-medium leading-none mt-0.5 ${user.status === 'active' ? 'text-indigo-600' : 'text-slate-500'}`}>
+                    <span
+                      className={`text-[10px] font-medium leading-none mt-0.5 ${
+                        user.status === 'active' ? 'text-indigo-600' : 'text-slate-500'
+                      }`}
+                    >
                       {user.status === 'active' ? 'Pro Plan' : 'Free Plan'}
                     </span>
                   </div>
                 </button>
               ) : (
                 <>
-                  <button type="button" onClick={() => setCurrentView('login')} className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('login')}
+                    className="text-sm font-medium text-slate-900 hover:text-indigo-600 transition-colors"
+                  >
                     Log In
                   </button>
-                  <button type="button" onClick={handleUpgradeClick} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all">
+                  <button
+                    type="button"
+                    onClick={handleUpgradeClick}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-all"
+                  >
                     Get Unlimited Access
                   </button>
                 </>
@@ -597,7 +724,11 @@ const App: React.FC = () => {
             </div>
 
             <div className="md:hidden">
-              <button type="button" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="p-2 text-slate-600">
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 text-slate-600"
+              >
                 {mobileMenuOpen ? <X /> : <Menu />}
               </button>
             </div>
@@ -606,22 +737,50 @@ const App: React.FC = () => {
 
         {mobileMenuOpen && (
           <div className="md:hidden bg-white border-b border-slate-200 p-4 space-y-4 shadow-lg">
-            <button type="button" onClick={() => scrollToSection(featuresRef)} className="block w-full text-left text-sm font-medium text-slate-600">How it works</button>
-            <button type="button" onClick={() => scrollToSection(pricingRef)} className="block w-full text-left text-sm font-medium text-slate-600">Pricing</button>
-            <button type="button" onClick={() => setShowHistoryModal(true)} className="block w-full text-left text-sm font-medium text-slate-600 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => scrollToSection(featuresRef)}
+              className="block w-full text-left text-sm font-medium text-slate-600"
+            >
+              How it works
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection(pricingRef)}
+              className="block w-full text-left text-sm font-medium text-slate-600"
+            >
+              Pricing
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHistoryModal(true)}
+              className="block w-full text-left text-sm font-medium text-slate-600 flex items-center gap-2"
+            >
               <History size={16} /> History
             </button>
             <div className="pt-4 border-t border-slate-100">
               {user ? (
-                <button type="button" onClick={() => setCurrentView('billing')} className="w-full text-left text-sm font-bold text-indigo-600">
+                <button
+                  type="button"
+                  onClick={() => setCurrentView('billing')}
+                  className="w-full text-left text-sm font-bold text-indigo-600"
+                >
                   Manage Account
                 </button>
               ) : (
                 <div className="space-y-2">
-                  <button type="button" onClick={() => setCurrentView('login')} className="block w-full text-center py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('login')}
+                    className="block w-full text-center py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg"
+                  >
                     Log In
                   </button>
-                  <button type="button" onClick={handleUpgradeClick} className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={handleUpgradeClick}
+                    className="block w-full text-center py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg"
+                  >
                     Get Unlimited Access
                   </button>
                 </div>
@@ -629,7 +788,6 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-
       </nav>
 
       <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
@@ -639,16 +797,18 @@ const App: React.FC = () => {
               Generate Accurate Job Quotes <span className="text-indigo-600">in Seconds.</span>
             </h1>
             <p className="text-xl text-slate-500 mb-8 leading-relaxed">
-              Stop losing evenings to paperwork. Select your trade, describe the job, and get a clean, itemized estimate instantly.
+              Stop losing evenings to paperwork. Select your trade, describe the job, and get a clean, itemized
+              estimate instantly.
             </p>
           </div>
 
           <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
-
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
               <div className="md:col-span-8">
                 <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">1</div>
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">
+                    1
+                  </div>
                   Select Trade
                 </label>
                 <IndustrySelector selected={industry} onSelect={setIndustry} disabled={isLoading} />
@@ -656,11 +816,16 @@ const App: React.FC = () => {
 
               <div className="md:col-span-4">
                 <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">2</div>
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">
+                    2
+                  </div>
                   Zip Code
                 </label>
                 <div className="relative group">
-                  <MapPin size={18} className="absolute left-3 top-3 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <MapPin
+                    size={18}
+                    className="absolute left-3 top-3 text-slate-400 group-focus-within:text-indigo-500 transition-colors"
+                  />
                   <input
                     type="text"
                     placeholder="e.g. 90210"
@@ -675,7 +840,9 @@ const App: React.FC = () => {
 
             <div className="mb-8">
               <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">3</div>
+                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">
+                  3
+                </div>
                 Job Description
               </label>
               <div className="relative">
@@ -694,7 +861,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               <div className="text-sm text-slate-500 flex items-center gap-2 order-2 sm:order-1">
                 {isLimitReached ? (
                   <span className="flex items-center gap-2 text-red-600 font-medium bg-red-50 px-3 py-1 rounded-full border border-red-100">
-                    <AlertCircle size={16} /> 
+                    <AlertCircle size={16} />
                     Daily Limit Reached ({usageCount}/{MAX_FREE_QUOTES})
                   </span>
                 ) : (
@@ -708,9 +875,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               <button
                 onClick={handleGenerateClick}
                 disabled={isLoading}
-                className={`
-                  order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl text-base font-bold text-white shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300
-                `}
+                className="order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl text-base font-bold text-white shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300"
               >
                 {isLoading ? (
                   <>
@@ -748,8 +913,9 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
             <div className="text-center mb-12">
               <h2 className="text-3xl font-bold text-slate-900 mb-4">Your Estimate is Ready!</h2>
               <p className="text-slate-500">
-                Based on market rates for <span className="font-bold text-slate-900">{zipCode || 'National Avg'}</span>. 
-                Review and edit the costs below before sending.
+                Based on market rates for{' '}
+                <span className="font-bold text-slate-900">{zipCode || 'National Avg'}</span>. Review and edit the
+                costs below before sending.
               </p>
             </div>
             <QuoteResultCard result={result} user={user} />
@@ -761,27 +927,32 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl font-bold text-slate-900 mb-4">Everything you need to win more jobs.</h2>
-            <p className="text-lg text-slate-500">Built for contractors who want to spend less time quoting and more time building.</p>
+            <p className="text-lg text-slate-500">
+              Built for contractors who want to spend less time quoting and more time building.
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               {
                 icon: <Zap size={24} className="text-indigo-600" />,
-                title: "Instant Turnaround",
-                desc: "Generate detailed estimates in under 10 seconds while on the job site or in your truck."
+                title: 'Instant Turnaround',
+                desc: 'Generate detailed estimates in under 10 seconds while on the job site or in your truck.',
               },
               {
                 icon: <MapPin size={24} className="text-indigo-600" />,
-                title: "Local Pricing",
-                desc: "AI analyzes local labor and material rates based on zip code to ensure competitive accuracy."
+                title: 'Local Pricing',
+                desc: 'AI analyzes local labor and material rates based on zip code to ensure competitive accuracy.',
               },
               {
                 icon: <LayoutTemplate size={24} className="text-indigo-600" />,
-                title: "Professional Formatting",
-                desc: "Get a breakdown that looks professional and ready to text or email directly to your client."
-              }
+                title: 'Professional Formatting',
+                desc: 'Get a breakdown that looks professional and ready to text or email directly to your client.',
+              },
             ].map((feature, i) => (
-              <div key={i} className="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 transition-all group">
+              <div
+                key={i}
+                className="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 transition-all group"
+              >
                 <div className="w-12 h-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
                   {feature.icon}
                 </div>
@@ -808,11 +979,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 Save 10+ hours a week on paperwork. No contracts, cancel anytime.
               </p>
               <ul className="space-y-4 mb-10">
-                {[
-                  "Unlimited Estimates",
-                  "History Storage",
-                  "Custom Company Branding",
-                ].map((item, i) => (
+                {['Unlimited Estimates', 'History Storage', 'Custom Company Branding'].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-slate-300">
                     <div className="bg-indigo-500 rounded-full p-1">
                       <Check size={14} className="text-white" />
@@ -839,9 +1006,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               >
                 Get Unlimited Access <ArrowRight size={20} />
               </button>
-              <p className="text-center text-xs text-slate-400 mt-4">
-                Secure payment via Stripe.
-              </p>
+              <p className="text-center text-xs text-slate-400 mt-4">Secure payment via Stripe.</p>
             </div>
           </div>
         </div>
@@ -855,7 +1020,10 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 <BrandLogo />
                 <span className="font-bold text-lg text-slate-900">Instant Quote Generator</span>
               </div>
-              <a href="mailto:support@instantquotegenerator.com" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
+              <a
+                href="mailto:support@instantquotegenerator.com"
+                className="text-sm text-slate-500 hover:text-indigo-600 transition-colors"
+              >
                 Support: support@instantquotegenerator.com
               </a>
             </div>
@@ -873,7 +1041,10 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">
                 <History className="text-indigo-600" /> Quote History
               </h3>
-              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-all">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-all"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -900,17 +1071,25 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                     }}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded uppercase">{item.industry}</span>
-                      <span className="text-xs text-slate-400">{new Date(item.timestamp).toLocaleDateString()}</span>
+                      <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded uppercase">
+                        {item.industry}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {new Date(item.timestamp).toLocaleDateString()}
+                      </span>
                     </div>
                     <p className="text-sm text-slate-800 font-medium line-clamp-2 mb-2 group-hover:text-indigo-600 transition-colors">
                       {item.jobDescription}
                     </p>
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                       <span className="text-xs font-bold text-slate-500">
-                        Est: ${item.priceRange.low.toLocaleString()} - ${item.priceRange.high.toLocaleString()}
+                        Est: ${item.priceRange.low.toLocaleString()} - $
+                        {item.priceRange.high.toLocaleString()}
                       </span>
-                      <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-500 transform group-hover:translate-x-1 transition-all" />
+                      <ArrowRight
+                        size={14}
+                        className="text-slate-300 group-hover:text-indigo-500 transform group-hover:translate-x-1 transition-all"
+                      />
                     </div>
                   </div>
                 ))
@@ -941,20 +1120,14 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                   <Zap size={32} className="text-white" />
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Usage Limit Reached</h2>
-                <p className="text-indigo-100">
-                  You've used all {MAX_FREE_QUOTES} free quotes for today.
-                </p>
+                <p className="text-indigo-100">You've used all {MAX_FREE_QUOTES} free quotes for today.</p>
               </div>
             </div>
 
             <div className="p-8 text-center">
               <h3 className="text-lg font-bold text-slate-900 mb-4">Upgrade for Unlimited Access</h3>
               <ul className="text-left space-y-3 mb-8 max-w-xs mx-auto">
-                {[
-                  "Unlimited AI Estimates",
-                  "Save & Export History",
-                  "Company Branding on Quotes"
-                ].map((feat, i) => (
+                {['Unlimited AI Estimates', 'Save & Export History', 'Company Branding on Quotes'].map((feat, i) => (
                   <li key={i} className="flex items-center gap-3 text-slate-600">
                     <Check size={16} className="text-green-500 shrink-0" />
                     <span className="text-sm">{feat}</span>
@@ -969,9 +1142,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                 Get Unlimited Access <ArrowRight size={18} />
               </button>
 
-              <p className="text-xs text-slate-400">
-                One-time setup. Cancel anytime.
-              </p>
+              <p className="text-xs text-slate-400">One-time setup. Cancel anytime.</p>
             </div>
           </div>
         </div>
