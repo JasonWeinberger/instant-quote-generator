@@ -36,8 +36,14 @@ const BrandLogo: React.FC = () => (
   <div className="relative w-11 h-11 bg-[#003366] rounded-full flex items-center justify-center shadow-md shrink-0 overflow-hidden border-2 border-white ring-1 ring-slate-900/10">
     <div className="absolute inset-[3px] rounded-full border-2 border-white"></div>
     <div className="relative w-full h-full flex items-center justify-center z-10">
-      <Hammer className="absolute w-5 h-5 text-white -translate-x-[1px] -translate-y-[1px] scale-x-[-1] rotate-12" strokeWidth={2.5} />
-      <Wrench className="absolute w-5 h-5 text-white translate-x-[1px] translate-y-[1px] -rotate-12" strokeWidth={2.5} />
+      <Hammer
+        className="absolute w-5 h-5 text-white -translate-x-[1px] -translate-y-[1px] scale-x-[-1] rotate-12"
+        strokeWidth={2.5}
+      />
+      <Wrench
+        className="absolute w-5 h-5 text-white translate-x-[1px] translate-y-[1px] -rotate-12"
+        strokeWidth={2.5}
+      />
     </div>
   </div>
 );
@@ -225,7 +231,7 @@ const App: React.FC = () => {
 
     const client = supabase!;
 
-    // Replace destructured param to avoid unused 'data'
+    // No destructured data here – avoids TS6133
     client.auth.getSession().then(async (sessionRes) => {
       const session = sessionRes.data.session;
       if (session) {
@@ -237,7 +243,7 @@ const App: React.FC = () => {
       }
     });
 
-    // Replace destructured 'data' to avoid TS6133
+    // Replace destructured { data: { subscription } } to avoid unused 'data'
     const authListener = client.auth.onAuthStateChange(async (event, session) => {
       const isRecovery =
         window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
@@ -897,9 +903,13 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                     <Loader2 className="animate-spin" size={20} /> Generating Estimate...
                   </>
                 ) : isLimitReached ? (
-                  <>Get Unlimited Access <ArrowRight size={18} /></>
+                  <>
+                    Get Unlimited Access <ArrowRight size={18} />
+                  </>
                 ) : (
-                  <>Generate Instant Quote <ArrowRight size={18} /></>
+                  <>
+                    Generate Instant Quote <ArrowRight size={18} />
+                  </>
                 )}
               </button>
             </div>
