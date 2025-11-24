@@ -11,7 +11,11 @@ const supabase = createClient(
 
 interface PaymentSuccessPageProps {
   user: User | null;
-  onActivate: (
+  /**
+   * onActivate is now optional and not used.
+   * Kept only so parent components don't break.
+   */
+  onActivate?: (
     email: string,
     password: string
   ) => Promise<{
@@ -20,8 +24,10 @@ interface PaymentSuccessPageProps {
   }>;
 }
 
-export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, onActivate }) => {
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required'>('loading');
+export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user }) => {
+  const [status, setStatus] = useState<
+    'loading' | 'error' | 'success' | 'existing_user' | 'email_confirmation_required'
+  >('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetEmail, setTargetEmail] = useState<string>('');
 
@@ -32,8 +38,8 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
     activationAttempted.current = true;
 
     // Retrieve stored email + password from BEFORE Stripe checkout
-    const email = localStorage.getItem('pendingUpgradeEmail') || user?.email;
-    const password = localStorage.getItem('pendingUpgradePassword');
+    const email = localStorage.getItem('pendingUpgradeEmail') || user?.email || '';
+    const password = localStorage.getItem('pendingUpgradePassword') || '';
 
     if (!email || !password) {
       console.log('[PaymentSuccessPage] Missing email or password');
@@ -44,46 +50,37 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
 
     setTargetEmail(email);
 
-    const executeActivation = async () => {
+    const executeSignUp = async () => {
       try {
-        console.log('[PaymentSuccessPage] activating with email + password');
+        console.log('[PaymentSuccessPage] calling supabase.auth.signUp to send activation email');
 
-        // Tell parent logic to mark user active, etc.
-        const response = await onActivate(email, password);
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password
+        });
 
-        if (response.result === 'success') {
-          // Now log the user in using the saved password
-          const { error: loginError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-          });
+        // Clean up stored values regardless of outcome
+        localStorage.removeItem('pendingUpgradeEmail');
+        localStorage.removeItem('pendingUpgradePassword');
 
-          if (loginError) {
-            console.error('Auto-login error:', loginError);
-            setStatus('error');
-            setErrorMessage(loginError.message);
+        if (error) {
+          console.error('[PaymentSuccessPage] signUp error:', error);
+
+          // If the user already exists, just tell them to log in
+          const msg = error.message.toLowerCase();
+          if (msg.includes('user already registered') || msg.includes('already registered')) {
+            setStatus('existing_user');
             return;
           }
 
-          // Clean up stored values
-          localStorage.removeItem('pendingUpgradeEmail');
-          localStorage.removeItem('pendingUpgradePassword');
-
-          setStatus('success');
-
-          // Redirect home
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 1000);
-
-        } else if (response.result === 'existing_user') {
-          setStatus('existing_user');
-        } else if (response.result === 'email_confirmation_required') {
-          setStatus('email_confirmation_required');
-        } else {
           setStatus('error');
-          setErrorMessage(response.message || 'Activation failed.');
+          setErrorMessage(error.message || 'Activation failed.');
+          return;
         }
+
+        // If signUp succeeds, Supabase has sent the confirmation email
+        console.log('[PaymentSuccessPage] signUp success:', data);
+        setStatus('email_confirmation_required');
       } catch (err: any) {
         console.error('[PaymentSuccessPage] Error in activation process', err);
         setStatus('error');
@@ -91,10 +88,10 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
       }
     };
 
-    executeActivation();
-  }, [user?.email, onActivate]);
+    executeSignUp();
+  }, [user?.email]);
 
-  // --- UI States (unchanged) ---
+  // --- UI States ---
 
   if (status === 'error') {
     return (
@@ -104,8 +101,13 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
             <AlertCircle size={32} />
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">Activation Issue</h2>
-          <p className="text-slate-500 mb-6">{errorMessage || "Please wait, redirecting..."}</p>
-          <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+          <p className="text-slate-500 mb-6">
+            {errorMessage || 'Please wait, redirecting...'}
+          </p>
+          <a
+            href="/"
+            className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+          >
             Return Home
           </a>
         </div>
@@ -122,12 +124,17 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Check Your Email</h2>
           <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-            Your account has been created!<br/>
+            Your account has been created!<br />
             We sent a confirmation link to <strong>{targetEmail}</strong>.
-            <br/><br/>
-            Please check your inbox (and spam folder) to verify your email and access your Pro account.
+            <br />
+            <br />
+            Please check your inbox (and spam folder) to verify your email and
+            access your Pro account.
           </p>
-          <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+          <a
+            href="/"
+            className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+          >
             Return to Home <ArrowRight size={16} />
           </a>
         </div>
@@ -144,12 +151,16 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Account Exists</h2>
           <p className="text-slate-500 mb-6 text-sm leading-relaxed">
-            Payment received! <br/>
+            Payment received! <br />
             We found an existing account for <strong>{targetEmail}</strong>.
-            <br/><br/>
+            <br />
+            <br />
             Please log in to access your Pro features.
           </p>
-          <a href="/" className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all">
+          <a
+            href="/"
+            className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 transition-all"
+          >
             Log In <ArrowRight size={16} />
           </a>
         </div>
@@ -157,11 +168,10 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
     );
   }
 
-  // SUCCESS OR LOADING
+  // SUCCESS or LOADING (success isn't really used now, but kept for compatibility)
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 animate-fade-in-up">
       <div className="bg-white p-10 rounded-2xl shadow-xl flex flex-col items-center text-center max-w-sm w-full border border-slate-200">
-        
         {status === 'success' ? (
           <div className="relative mb-6">
             <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg animate-fade-in-up">
@@ -189,7 +199,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user, on
           </p>
         ) : (
           <p className="text-slate-400 text-sm mt-2">
-            Please wait while we unlock your unlimited access.
+            Please wait while we send your activation link.
           </p>
         )}
       </div>
