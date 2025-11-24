@@ -14,36 +14,6 @@ import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight
 
 const MAX_FREE_QUOTES = 3;
 
-const isRecoveryUrl = () => {
-  if (typeof window === 'undefined') return false;
-  const { pathname, search, hash } = window.location;
-  return (
-    pathname === '/reset-password' ||
-    search.includes('type=recovery') ||
-    search.includes('auth=recovery') ||
-    hash.includes('type=recovery')
-  );
-};
-
-const getRecoveryRedirectUrl = () => {
-  const envUrl = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined)?.trim();
-  if (envUrl) {
-    const configuredUrl = new URL(envUrl);
-    configuredUrl.searchParams.set('auth', 'recovery');
-    return configuredUrl.toString();
-  }
-
-  if (typeof window !== 'undefined') {
-    const fallbackUrl = new URL(window.location.origin);
-    fallbackUrl.searchParams.set('auth', 'recovery');
-    return fallbackUrl.toString();
-  }
-
-  return '';
-};
-
-const normalizeEmail = (value: string) => value.trim().toLowerCase();
-
 type ViewState = 'landing' | 'login' | 'billing' | 'payment_success' | 'reset_password';
 
 const BrandLogo: React.FC = () => (
@@ -83,7 +53,16 @@ const App: React.FC = () => {
 
   // Check for Reset Password URL on Mount
   useEffect(() => {
-    if (isRecoveryUrl()) {
+    const path = window.location.pathname;
+    const search = window.location.search;
+    const hash = window.location.hash;
+
+    const isRecovery = 
+        path === '/reset-password' || 
+        search.includes('type=recovery') || 
+        hash.includes('type=recovery');
+
+    if (isRecovery) {
         setCurrentView('reset_password');
     }
   }, []);
@@ -173,16 +152,17 @@ const App: React.FC = () => {
 
     const client = supabase!;
 
-      client.auth.getSession().then(async ({ data: { session } }) => {
-          if (session) {
-              if (!isRecoveryUrl()) {
+    client.auth.getSession().then(async ({ data: { session } }) => {
+        if (session) {
+            const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+            if (!isRecovery) {
                 await fetchUserProfile(session.user.id, session.user.email || '');
             }
         }
     });
     
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-          const isRecovery = isRecoveryUrl();
+        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
 
         if (event === 'PASSWORD_RECOVERY' || isRecovery) {
             setCurrentView('reset_password');
@@ -246,15 +226,10 @@ const App: React.FC = () => {
   };
 
   const handleEmailSubmit = (email: string) => {
-        const cleanedEmail = normalizeEmail(email);
-        if (!cleanedEmail) {
-            console.warn('[upgrade] attempted to continue without a valid email');
-            return;
-        }
-        localStorage.setItem('pendingUpgradeEmail', cleanedEmail);
-        setShowEmailModal(false);
-        window.open(STRIPE_LINKS.monthly, '_blank');
-    };
+      localStorage.setItem('pendingUpgradeEmail', email);
+      setShowEmailModal(false);
+      window.open(STRIPE_LINKS.monthly, '_blank');
+  };
 
   const handleGenerateClick = async () => {
     if (isLimitReached) {
@@ -350,17 +325,15 @@ const App: React.FC = () => {
       }
   };
 
-    const handleResetPassword = async (email: string) => {
-        if (supabase) {
-            const client = supabase!;
-            const redirectTo = getRecoveryRedirectUrl() || undefined;
-
-            const { error } = await client.auth.resetPasswordForEmail(email, {
-                redirectTo,
-            });
-            if (error) throw error;
-        }
-    };
+  const handleResetPassword = async (email: string) => {
+      if (supabase) {
+          const client = supabase!;
+          const { error } = await client.auth.resetPasswordForEmail(email, {
+              redirectTo: `${window.location.origin}/reset-password`,
+          });
+          if (error) throw error;
+      }
+  };
 
   const handleUpdatePassword = async (password: string) => {
       if (supabase) {
@@ -371,158 +344,116 @@ const App: React.FC = () => {
   };
 
   // PLG FLOW: Passwordless Activation
-  type ActivationResult = 'success' | 'existing_user' | 'email_confirmation_required' | 'rate_limited' | 'error';
+  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
+      console.log('[activate] start', email);
 
-  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: ActivationResult, message?: string }> => {
-        const targetEmail = normalizeEmail(email);
-        if (!targetEmail) {
-            console.warn('[activate] missing email input');
-            return { result: 'error', message: 'We could not determine which email to activate.' };
-        }
+      if (!supabase) {
+          // DEMO MODE
+          const newUser: User = {
+              id: `local_paid_${Date.now()}`,
+              email: email,
+              plan: 'pro',
+              status: 'active',
+              trialStartDate: Date.now()
+          };
+          setUser(newUser);
+          localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
+          setShowPaywallModal(false);
+          console.log('[activate] DONE (demo mode)');
+          return { result: 'success' };
+      }
 
-        console.log('[activate] start', targetEmail);
+      const client = supabase!;
 
-        if (!supabase) {
-            // DEMO MODE
-            const newUser: User = {
-                id: `local_paid_${Date.now()}`,
-                email: targetEmail,
-                plan: 'pro',
-                status: 'active',
-                trialStartDate: Date.now()
-            };
-            setUser(newUser);
-            localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-            setShowPaywallModal(false);
-            console.log('[activate] DONE (demo mode)');
-            return { result: 'success' };
-        }
+      try {
+        // A) Check existing session
+        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        console.log('[activate] getSession', { sessionData, sessionError });
 
-        const client = supabase!;
-
-        try {
-          // A) Check existing session
-          const { data: sessionData, error: sessionError } = await client.auth.getSession();
-          console.log('[activate] getSession', { sessionData, sessionError });
-
-          const existingSession = sessionData?.session;
-          const sessionEmail = existingSession?.user?.email ? normalizeEmail(existingSession.user.email) : null;
-
-          if (existingSession) {
-              if (sessionEmail === targetEmail) {
-                  console.log('[activate] matching session detected, upgrading user');
-                  
-                  await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-                  
-                  const { error: upsertError } = await client.from('users').upsert({
-                    id: existingSession.user.id,
-                    email: existingSession.user.email || targetEmail,
-                    status: 'active',
-                    plan: 'pro',
-                    updated_at: new Date().toISOString(),
-                  });
-
-                  if (upsertError) {
-                     console.error('[activate] upsert error (existing session)', upsertError);
-                     throw upsertError;
-                  }
-
-                  await fetchUserProfile(existingSession.user.id, existingSession.user.email || targetEmail);
-                  localStorage.removeItem('pendingUpgradeEmail');
-                  console.log('[activate] DONE (existing session)');
-                  return { result: 'success' };
-              } else {
-                  console.warn('[activate] session email mismatch, signing out before retry', { sessionEmail, targetEmail });
-                  await client.auth.signOut();
-              }
-          }
-
-          // B) Try sign-up with random password
-          const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-          console.log('[activate] signUp start', { targetEmail });
-
-        const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
-              email: targetEmail, 
-              password: randomPassword,
-              options: {
-                  data: { status: 'active', plan: 'pro' }
-              }
+        if (sessionData?.session) {
+          console.log('[activate] already have session, upgrading user');
+          
+          await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
+          
+          const { error: upsertError } = await client.from('users').upsert({
+            id: sessionData.session.user.id,
+            email: sessionData.session.user.email,
+            status: 'active',
+            plan: 'pro',
+            updated_at: new Date().toISOString(),
           });
 
-          console.log('[activate] signUp result', { signUpData, signUpError });
+          if (upsertError) {
+             console.error('[activate] upsert error (existing session)', upsertError);
+             throw upsertError;
+          }
+
+          await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+          localStorage.removeItem('pendingUpgradeEmail');
+          console.log('[activate] DONE (existing session)');
+          return { result: 'success' };
+        }
+
+        // B) Try sign-up with random password
+        const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
+        console.log('[activate] signUp start', { email, randomPassword });
+
+        const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
+            email, 
+            password: randomPassword,
+            options: {
+                data: { status: 'active', plan: 'pro' }
+            }
+        });
+
+        console.log('[activate] signUp result', { signUpData, signUpError });
 
         if (signUpError) {
             const msg = (signUpError.message || '').toLowerCase();
-            const code = typeof signUpError.code === 'string' ? signUpError.code.toLowerCase() : '';
-            
-              if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-                  console.log('[activate] existing user case - sending OTP login');
-                  const recoveryRedirect = getRecoveryRedirectUrl();
-                  const otpOptions = recoveryRedirect ? { emailRedirectTo: recoveryRedirect } : {};
-
-                const { error: otpError } = await client.auth.signInWithOtp({
-                    email: targetEmail,
-                    options: otpOptions
-                });
-
-                if (otpError) {
-                    console.warn('[activate] signInWithOtp failed', otpError);
-                    return { result: 'existing_user', message: 'We found an existing account. Please log in to finish enabling Pro access.' };
-                }
-
-                return { 
-                    result: 'email_confirmation_required', 
-                    message: 'We found an existing account and emailed you a secure login link to finish activation.' 
-                };
+            // Handle existing user
+            if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
+                console.log('[activate] existing user case');
+                return { result: 'existing_user' };
             }
-
-            if (signUpError.status === 429 || msg.includes('rate limit') || code === 'over_email_send_rate_limit') {
-                console.warn('[activate] rate limit encountered on signUp');
-                return { 
-                    result: 'rate_limited',
-                    message: 'We just sent a confirmation email. Please wait a minute before retrying the activation.'
-                };
-            }
-
             console.error('[activate] signUp error (fatal)', signUpError);
             throw signUpError;
         }
 
-          // Handle Email Confirmation Required (User returned but no Session)
-          // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
-          if (signUpData.user && !signUpData.session) {
-               console.log('[activate] signUp successful but no session (email confirmation required)');
-              return { result: 'email_confirmation_required' };
-          }
+        // Handle Email Confirmation Required (User returned but no Session)
+        // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
+        if (signUpData.user && !signUpData.session) {
+             console.log('[activate] signUp successful but no session (email confirmation required)');
+            return { result: 'email_confirmation_required' };
+        }
 
-          if (!signUpData?.user || !signUpData.session) {
-               console.error('[activate] signUp returned no user or session', signUpData);
-               throw new Error('Signup returned no session');
-          }
+        if (!signUpData?.user || !signUpData.session) {
+             console.error('[activate] signUp returned no user or session', signUpData);
+             throw new Error('Signup returned no session');
+        }
 
-          // C) Upsert profile row (Authenticated)
-          const { error: upsertError } = await client.from('users').upsert({ 
-              id: signUpData.user.id, 
-              email: targetEmail,
-              status: 'active',
-              plan: 'pro',
-              updated_at: new Date().toISOString()
-          });
-          console.log('[activate] upsert result', { upsertError });
+        // C) Upsert profile row (Authenticated)
+        const { error: upsertError } = await client.from('users').upsert({ 
+            id: signUpData.user.id, 
+            email: email,
+            status: 'active',
+            plan: 'pro',
+            updated_at: new Date().toISOString()
+        });
+        console.log('[activate] upsert result', { upsertError });
 
-          if (upsertError) {
-              console.error('[activate] upsert error', upsertError);
-              throw upsertError;
-          }
+        if (upsertError) {
+            console.error('[activate] upsert error', upsertError);
+            throw upsertError;
+        }
 
-          await fetchUserProfile(signUpData.user.id, targetEmail);
-          localStorage.removeItem('pendingUpgradeEmail'); 
-          console.log('[activate] DONE (new signup)');
-          return { result: 'success' };
+        await fetchUserProfile(signUpData.user.id, email);
+        localStorage.removeItem('pendingUpgradeEmail'); 
+        console.log('[activate] DONE (new signup)');
+        return { result: 'success' };
 
       } catch (err: any) {
           console.error('[activate] UNHANDLED ERROR', err);
-          return { result: 'error', message: err?.message || 'Activation failed. Please try again or contact support.' }; 
+          return { result: 'existing_user' }; 
       }
   }, [fetchUserProfile]);
 
