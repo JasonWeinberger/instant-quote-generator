@@ -141,50 +141,52 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 🔹 Auto-login after email confirmation (signup only)
-  useEffect(() => {
-    const handleAuthCallback = async () => {
-      if (!isSupabaseConfigured() || !supabase) return;
-      if (hasHandledAuthCallback) return;
-      hasHandledAuthCallback = true;
+// 🔹 Auto-login after email confirmation (signup only)
+useEffect(() => {
+  const handleAuthCallback = async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
 
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
 
-      // Only auto-login for signup confirmation links from email
-      if (!code || type !== 'signup') return;
+    // Only auto-login for signup confirmation links
+    if (!code || type !== 'signup') return;
 
-      try {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    try {
+      // Exchange the one-time code for a session
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
 
-        if (error) {
-          console.error('[auth callback] exchangeCodeForSession error:', error);
-          return;
-        }
-
-        // Clean auth params from URL
-        url.searchParams.delete('code');
-        url.searchParams.delete('type');
-        window.history.replaceState({}, document.title, url.toString());
-
-        // Hydrate user/profile after successful session exchange
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-        if (userError) {
-          console.error('[auth callback] getUser error:', userError);
-          return;
-        }
-
-        if (userData?.user) {
-          await fetchUserProfile(userData.user.id, userData.user.email || '');
-        }
-      } catch (err) {
-        console.error('[auth callback] unexpected error:', err);
+      if (error) {
+        console.error('[auth callback] exchangeCodeForSession error:', error);
+        return;
       }
-    };
 
-    handleAuthCallback();
-  }, [fetchUserProfile]);
+      // Clean URL so it doesn't re-trigger
+      url.searchParams.delete('code');
+      url.searchParams.delete('type');
+      window.history.replaceState({}, document.title, url.toString());
+
+      // Fetch the user + hydrate your existing profile logic
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('[auth callback] getUser error:', userError);
+        return;
+      }
+
+      if (userData?.user) {
+        await fetchUserProfile(userData.user.id, userData.user.email || '');
+      }
+    } catch (err) {
+      console.error('[auth callback] unexpected error:', err);
+    }
+  };
+
+  handleAuthCallback();
+}, [fetchUserProfile]);
+
 
   // Initialize
   useEffect(() => {
