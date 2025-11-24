@@ -93,54 +93,54 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Memoize fetchUserProfile
+  // 🔹 Any Supabase user = active Pro user
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
     if (!supabase) return;
     const client = supabase!;
 
     try {
-      const [authResponse, dbResponse] = await Promise.all([
-        client.auth.getUser(),
-        client.from('users').select('*').eq('id', userId).maybeSingle(),
-      ]);
+      const { data: dbData, error: dbError } = await client
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-      const authUser = authResponse.data.user;
-      const authMetadata = authUser?.user_metadata || {};
-      const dbData = dbResponse.data;
+      if (dbError) {
+        console.warn('Error loading user row:', dbError);
+      }
 
-      let status = dbData?.status || 'trial';
-      let plan = dbData?.plan || 'starter';
+      const status: User['status'] = 'active';
+      const plan: User['plan'] = 'pro';
 
-      if (authMetadata.status === 'active' && status !== 'active') {
-        status = 'active';
-        plan = 'pro';
+      // Keep DB in sync so future logins are consistent
+      const { error: upsertError } = await client.from('users').upsert({
+        id: userId,
+        email,
+        status,
+        plan,
+        company_name: dbData?.company_name,
+        company_phone: dbData?.company_phone,
+        company_address: dbData?.company_address,
+        updated_at: new Date().toISOString(),
+      });
 
-        try {
-          await client.from('users').upsert({
-            id: userId,
-            email: email,
-            status: 'active',
-            plan: 'pro',
-            company_name: dbData?.company_name || authMetadata.company_name,
-            company_phone: dbData?.company_phone,
-            company_address: dbData?.company_address,
-            updated_at: new Date().toISOString(),
-          });
-        } catch (e) {
-          console.warn('DB sync error', e);
-        }
+      if (upsertError) {
+        console.warn('DB sync error (upsert failed):', upsertError);
       }
 
       const u: User = {
         id: userId,
         email: dbData?.email || email,
-        plan: plan as 'starter' | 'pro',
-        status: status as 'active' | 'trial' | 'expired' | 'cancelled',
-        trialStartDate: dbData?.created_at ? new Date(dbData.created_at).getTime() : Date.now(),
+        plan,
+        status,
+        trialStartDate: dbData?.created_at
+          ? new Date(dbData.created_at).getTime()
+          : Date.now(),
         companyName: dbData?.company_name,
         companyPhone: dbData?.company_phone,
         companyAddress: dbData?.company_address,
       };
+
       setUser(u);
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -231,7 +231,6 @@ const App: React.FC = () => {
 
     const client = supabase!;
 
-    // No destructured data here – avoids TS6133
     client.auth.getSession().then(async (sessionRes) => {
       const session = sessionRes.data.session;
       if (session) {
@@ -243,7 +242,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Replace destructured { data: { subscription } } to avoid unused 'data'
     const authListener = client.auth.onAuthStateChange(async (event, session) => {
       const isRecovery =
         window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
@@ -264,6 +262,8 @@ const App: React.FC = () => {
           const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
           const sessionEmail = session.user.email;
 
+          // This still syncs metadata for users created via the Stripe → Email flow,
+          // but fetchUserProfile will force them to active/pro anyway.
           if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
             await client.auth.updateUser({
               data: { status: 'active', plan: 'pro' },
