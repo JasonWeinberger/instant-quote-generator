@@ -44,9 +44,13 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
 
+  // 🔹 Close mobile nav whenever we change views (login, billing, landing, etc.)
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [currentView]);
+
   // Email Capture State
   const [showEmailModal, setShowEmailModal] = useState(false);
-
   const resultRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
