@@ -141,53 +141,53 @@ const App: React.FC = () => {
     }
   }, []);
 
-// 🔹 Auto-login after email confirmation (signup only)
-useEffect(() => {
-  const handleAuthCallback = async () => {
-    if (!isSupabaseConfigured() || !supabase) return;
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
+  // 🔹 Auto-login after email confirmation (signup only)
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
+      if (hasHandledAuthCallback) return;
+      hasHandledAuthCallback = true;
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
-    const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
 
-    // Only auto-login for signup confirmation links from email
-    if (!code || type !== 'signup') return;
+      // Only auto-login for signup confirmation links from email
+      if (!code || type !== 'signup') return;
 
-    try {
-      // ⬇️ NOTE: no `data` here anymore
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      try {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-      if (exchangeError) {
-        console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
-        return;
+        if (exchangeError) {
+          console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+          return;
+        }
+
+        // Clean auth params from URL
+        url.searchParams.delete('code');
+        url.searchParams.delete('type');
+        window.history.replaceState({}, document.title, url.toString());
+
+        // Hydrate user/profile after successful session exchange
+        const userRes = await supabase.auth.getUser();
+        const userError = userRes.error;
+        const userData = userRes.data;
+
+        if (userError) {
+          console.error('[auth callback] getUser error:', userError);
+          return;
+        }
+
+        if (userData?.user) {
+          await fetchUserProfile(userData.user.id, userData.user.email || '');
+        }
+      } catch (err) {
+        console.error('[auth callback] unexpected error:', err);
       }
+    };
 
-      // Clean auth params from URL
-      url.searchParams.delete('code');
-      url.searchParams.delete('type');
-      window.history.replaceState({}, document.title, url.toString());
-
-      // Hydrate user/profile after successful session exchange
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('[auth callback] getUser error:', userError);
-        return;
-      }
-
-      if (userData?.user) {
-        await fetchUserProfile(userData.user.id, userData.user.email || '');
-      }
-    } catch (err) {
-      console.error('[auth callback] unexpected error:', err);
-    }
-  };
-
-  handleAuthCallback();
-}, [fetchUserProfile]);
-
-
+    handleAuthCallback();
+  }, [fetchUserProfile]);
 
   // Initialize
   useEffect(() => {
@@ -225,7 +225,9 @@ useEffect(() => {
 
     const client = supabase!;
 
-    client.auth.getSession().then(async ({ data: { session } }) => {
+    // Replace destructured param to avoid unused 'data'
+    client.auth.getSession().then(async (sessionRes) => {
+      const session = sessionRes.data.session;
       if (session) {
         const isRecovery =
           window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
@@ -235,9 +237,8 @@ useEffect(() => {
       }
     });
 
-    const {
-      data: { subscription },
-    } = client.auth.onAuthStateChange(async (event, session) => {
+    // Replace destructured 'data' to avoid TS6133
+    const authListener = client.auth.onAuthStateChange(async (event, session) => {
       const isRecovery =
         window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
 
@@ -279,7 +280,12 @@ useEffect(() => {
         }
       }
     });
-    return () => subscription.unsubscribe();
+
+    const subscription = authListener.data.subscription;
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [fetchUserProfile]);
 
   // Check for Payment Success URL Param
@@ -454,7 +460,10 @@ useEffect(() => {
 
       try {
         // A) Check existing session
-        const { data: sessionData, error: sessionError } = await client.auth.getSession();
+        const sessionRes = await client.auth.getSession();
+        const sessionData = sessionRes.data;
+        const sessionError = sessionRes.error;
+
         console.log('[activate] getSession', { sessionData, sessionError });
 
         if (sessionData?.session) {
@@ -488,13 +497,16 @@ useEffect(() => {
           storedPassword || `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
         console.log('[activate] signUp start', { email });
 
-        const { data: signUpData, error: signUpError } = await client.auth.signUp({
+        const signUpRes = await client.auth.signUp({
           email,
           password: passwordToUse,
           options: {
             data: { status: 'active', plan: 'pro' },
           },
         });
+
+        const signUpData = signUpRes.data;
+        const signUpError = signUpRes.error;
 
         console.log('[activate] signUp result', { signUpData, signUpError });
 
@@ -1084,7 +1096,7 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                     <p className="text-sm text-slate-800 font-medium line-clamp-2 mb-2 group-hover:text-indigo-600 transition-colors">
                       {item.jobDescription}
                     </p>
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between pt-2 border-slate-100 border-t">
                       <span className="text-xs font-bold text-slate-500">
                         Est: ${item.priceRange.low.toLocaleString()} - $
                         {item.priceRange.high.toLocaleString()}
