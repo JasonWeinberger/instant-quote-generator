@@ -344,10 +344,10 @@ const App: React.FC = () => {
     }
   };
 
-  // UPDATED: now takes email + password (not passwordless)
+  // UPDATED: still takes email only from PaymentSuccessPage,
+  // but uses stored password from localStorage if available.
   const handlePaymentSuccessActivation = useCallback(async (
-    email: string,
-    password: string
+    email: string
   ): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
     console.log('[activate] start', email);
 
@@ -394,16 +394,19 @@ const App: React.FC = () => {
 
         await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
         localStorage.removeItem('pendingUpgradeEmail');
+        localStorage.removeItem('pendingUpgradePassword');
         console.log('[activate] DONE (existing session)');
         return { result: 'success' };
       }
 
-      // B) Sign-up using the password they created in the modal
+      // B) Try sign-up using stored password (from upgrade modal) or random fallback
+      const storedPassword = localStorage.getItem('pendingUpgradePassword');
+      const passwordToUse = storedPassword || `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
       console.log('[activate] signUp start', { email });
 
       const { data: signUpData, error: signUpError } = await client.auth.signUp({
         email,
-        password,
+        password: passwordToUse,
         options: {
           data: { status: 'active', plan: 'pro' }
         }
@@ -413,6 +416,7 @@ const App: React.FC = () => {
 
       if (signUpError) {
         const msg = (signUpError.message || '').toLowerCase();
+        // Handle existing user
         if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
           console.log('[activate] existing user case');
           return { result: 'existing_user' };
@@ -421,7 +425,7 @@ const App: React.FC = () => {
         throw signUpError;
       }
 
-      // Email confirmation required (no session yet)
+      // Handle Email Confirmation Required (User returned but no Session)
       if (signUpData.user && !signUpData.session) {
         console.log('[activate] signUp successful but no session (email confirmation required)');
         return { result: 'email_confirmation_required' };
@@ -432,7 +436,7 @@ const App: React.FC = () => {
         throw new Error('Signup returned no session');
       }
 
-      // C) Upsert profile row
+      // C) Upsert profile row (Authenticated)
       const { error: upsertError } = await client.from('users').upsert({
         id: signUpData.user.id,
         email: email,
@@ -449,6 +453,7 @@ const App: React.FC = () => {
 
       await fetchUserProfile(signUpData.user.id, email);
       localStorage.removeItem('pendingUpgradeEmail');
+      localStorage.removeItem('pendingUpgradePassword');
       console.log('[activate] DONE (new signup)');
       return { result: 'success' };
 
@@ -623,10 +628,350 @@ const App: React.FC = () => {
 
       </nav>
 
-      {/* --- rest of the landing page, result, features, pricing, footer, modals --- */}
-      {/* (unchanged from your original, omitted here for brevity) */}
+      <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center max-w-3xl mx-auto mb-10">
+            <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-6 leading-tight">
+              Generate Accurate Job Quotes <span className="text-indigo-600">in Seconds.</span>
+            </h1>
+            <p className="text-xl text-slate-500 mb-8 leading-relaxed">
+              Stop losing evenings to paperwork. Select your trade, describe the job, and get a clean, itemized estimate instantly.
+            </p>
+          </div>
 
-      {/* ...[everything below stays exactly as in your original file]... */}
+          <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
+              <div className="md:col-span-8">
+                <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">1</div>
+                  Select Trade
+                </label>
+                <IndustrySelector selected={industry} onSelect={setIndustry} disabled={isLoading} />
+              </div>
+
+              <div className="md:col-span-4">
+                <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">2</div>
+                  Zip Code
+                </label>
+                <div className="relative group">
+                  <MapPin size={18} className="absolute left-3 top-3 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <input
+                    type="text"
+                    placeholder="e.g. 90210"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all"
+                    maxLength={5}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold border border-indigo-200">3</div>
+                Job Description
+              </label>
+              <div className="relative">
+                <textarea
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder={`Describe the project in detail for the most accurate quote...
+Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear off existing layer. Include synthetic underlayment and new drip edge."`}
+                  className="w-full h-40 p-5 bg-slate-50 border border-slate-200 rounded-2xl resize-none focus:ring-2 focus:ring-indigo-500 focus:bg-white focus:outline-none transition-all text-base placeholder-slate-400 shadow-inner leading-relaxed"
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+              <div className="text-sm text-slate-500 flex items-center gap-2 order-2 sm:order-1">
+                {isLimitReached ? (
+                  <span className="flex items-center gap-2 text-red-600 font-medium bg-red-50 px-3 py-1 rounded-full border border-red-100">
+                    <AlertCircle size={16} /> 
+                    Daily Limit Reached ({usageCount}/{MAX_FREE_QUOTES})
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2 text-slate-500">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    {quotesRemaining} free quotes remaining
+                  </span>
+                )}
+              </div>
+
+              <button
+                onClick={handleGenerateClick}
+                disabled={isLoading}
+                className={`
+                  order-1 sm:order-2 w-full sm:w-auto px-8 py-3.5 rounded-xl text-base font-bold text-white shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 hover:shadow-indigo-300
+                `}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} /> Generating Estimate...
+                  </>
+                ) : isLimitReached ? (
+                  <>Get Unlimited Access <ArrowRight size={18} /></>
+                ) : (
+                  <>Generate Instant Quote <ArrowRight size={18} /></>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="max-w-4xl mx-auto mt-6 animate-fade-in-up">
+              <div className="bg-red-50 border border-red-100 text-red-600 px-6 py-4 rounded-xl flex items-center gap-3 shadow-sm">
+                <AlertCircle size={20} className="shrink-0" />
+                <p className="font-medium">{error}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="absolute top-0 left-0 right-0 h-[600px] bg-gradient-to-b from-indigo-50 to-slate-50 -z-10"></div>
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 opacity-30 pointer-events-none">
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-indigo-200 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 -right-24 w-80 h-80 bg-blue-200 rounded-full blur-3xl"></div>
+        </div>
+      </div>
+
+      {result && (
+        <div ref={resultRef} className="bg-slate-50 py-16 relative">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-slate-900 mb-4">Your Estimate is Ready!</h2>
+              <p className="text-slate-500">
+                Based on market rates for <span className="font-bold text-slate-900">{zipCode || 'National Avg'}</span>. 
+                Review and edit the costs below before sending.
+              </p>
+            </div>
+            <QuoteResultCard result={result} user={user} />
+          </div>
+        </div>
+      )}
+
+      <div ref={featuresRef} className="py-24 bg-white border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Everything you need to win more jobs.</h2>
+            <p className="text-lg text-slate-500">Built for contractors who want to spend less time quoting and more time building.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                icon: <Zap size={24} className="text-indigo-600" />,
+                title: "Instant Turnaround",
+                desc: "Generate detailed estimates in under 10 seconds while on the job site or in your truck."
+              },
+              {
+                icon: <MapPin size={24} className="text-indigo-600" />,
+                title: "Local Pricing",
+                desc: "AI analyzes local labor and material rates based on zip code to ensure competitive accuracy."
+              },
+              {
+                icon: <LayoutTemplate size={24} className="text-indigo-600" />,
+                title: "Professional Formatting",
+                desc: "Get a breakdown that looks professional and ready to text or email directly to your client."
+              }
+            ].map((feature, i) => (
+              <div key={i} className="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:border-indigo-100 hover:shadow-lg hover:shadow-indigo-100/50 transition-all group">
+                <div className="w-12 h-12 bg-white rounded-xl border border-slate-200 flex items-center justify-center mb-6 shadow-sm group-hover:scale-110 transition-transform">
+                  {feature.icon}
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-3">{feature.title}</h3>
+                <p className="text-slate-500 leading-relaxed">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div ref={pricingRef} className="py-24 bg-slate-900 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M0 100 C 20 0 50 0 100 100 Z" fill="#0052CC" />
+          </svg>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <h2 className="text-4xl font-bold mb-6">Simple, transparent pricing.</h2>
+              <p className="text-xl text-slate-300 mb-8 leading-relaxed">
+                Save 10+ hours a week on paperwork. No contracts, cancel anytime.
+              </p>
+              <ul className="space-y-4 mb-10">
+                {[
+                  "Unlimited Estimates",
+                  "History Storage",
+                  "Custom Company Branding",
+                ].map((item, i) => (
+                  <li key={i} className="flex items-center gap-3 text-slate-300">
+                    <div className="bg-indigo-500 rounded-full p-1">
+                      <Check size={14} className="text-white" />
+                    </div>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="bg-white text-slate-900 rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/50 relative">
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Pro Plan</h3>
+              <div className="flex items-baseline gap-1 mb-6">
+                <span className="text-5xl font-extrabold tracking-tight">$29</span>
+                <span className="text-slate-500 font-medium">/month</span>
+              </div>
+              <p className="text-slate-500 mb-8">
+                Everything you need to automate your quoting process and win more bids.
+              </p>
+
+              <button
+                onClick={handleUpgradeClick}
+                className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1 text-lg flex items-center justify-center gap-2"
+              >
+                Get Unlimited Access <ArrowRight size={20} />
+              </button>
+              <p className="text-center text-xs text-slate-400 mt-4">
+                Secure payment via Stripe.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer className="bg-white border-t border-slate-200 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex flex-col md:flex-row items-center gap-6">
+              <div className="flex items-center gap-2">
+                <BrandLogo />
+                <span className="font-bold text-lg text-slate-900">Instant Quote Generator</span>
+              </div>
+              <a href="mailto:support@instantquotegenerator.com" className="text-sm text-slate-500 hover:text-indigo-600 transition-colors">
+                Support: support@instantquotegenerator.com
+              </a>
+            </div>
+            <div className="text-slate-500 text-sm">
+              © {new Date().getFullYear()} Instant Quote Generator. All rights reserved.
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-xl text-slate-900 flex items-center gap-2">
+                <History className="text-indigo-600" /> Quote History
+              </h3>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 p-2 hover:bg-slate-200 rounded-full transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6 space-y-4">
+              {history.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <History size={48} className="mx-auto mb-4 opacity-20" />
+                  <p>No history found. Generate your first quote!</p>
+                </div>
+              ) : (
+                history.map((item) => (
+                  <div
+                    key={item.id}
+                    className="border border-slate-200 rounded-xl p-4 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer bg-white group"
+                    onClick={() => {
+                      setResult(item);
+                      setIndustry(item.industry);
+                      setJobDescription(item.jobDescription);
+                      setZipCode(item.zipCode || '');
+                      setShowHistoryModal(false);
+                      setTimeout(() => {
+                        resultRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      }, 100);
+                    }}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-1 rounded uppercase">{item.industry}</span>
+                      <span className="text-xs text-slate-400">{new Date(item.timestamp).toLocaleDateString()}</span>
+                    </div>
+                    <p className="text-sm text-slate-800 font-medium line-clamp-2 mb-2 group-hover:text-indigo-600 transition-colors">
+                      {item.jobDescription}
+                    </p>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <span className="text-xs font-bold text-slate-500">
+                        Est: ${item.priceRange.low.toLocaleString()} - ${item.priceRange.high.toLocaleString()}
+                      </span>
+                      <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-500 transform group-hover:translate-x-1 transition-all" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPaywallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300 relative">
+            <button
+              onClick={() => setShowPaywallModal(false)}
+              className="absolute top-4 right-4 p-2 bg-white/50 hover:bg-slate-100 rounded-full text-slate-500 transition-colors z-10"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="bg-indigo-600 p-8 text-center text-white relative overflow-hidden">
+              <div className="absolute inset-0 opacity-20">
+                <svg className="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <path d="M0 100 C 20 0 50 0 100 100 Z" fill="white" />
+                </svg>
+              </div>
+              <div className="relative z-10">
+                <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-white/30">
+                  <Zap size={32} className="text-white" />
+                </div>
+                <h2 className="text-2xl font-bold mb-2">Usage Limit Reached</h2>
+                <p className="text-indigo-100">
+                  You've used all {MAX_FREE_QUOTES} free quotes for today.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-8 text-center">
+              <h3 className="text-lg font-bold text-slate-900 mb-4">Upgrade for Unlimited Access</h3>
+              <ul className="text-left space-y-3 mb-8 max-w-xs mx-auto">
+                {[
+                  "Unlimited AI Estimates",
+                  "Save & Export History",
+                  "Company Branding on Quotes"
+                ].map((feat, i) => (
+                  <li key={i} className="flex items-center gap-3 text-slate-600">
+                    <Check size={16} className="text-green-500 shrink-0" />
+                    <span className="text-sm">{feat}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={handleUpgradeClick}
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-4"
+              >
+                Get Unlimited Access <ArrowRight size={18} />
+              </button>
+
+              <p className="text-xs text-slate-400">
+                One-time setup. Cancel anytime.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
