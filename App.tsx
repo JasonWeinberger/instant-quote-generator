@@ -131,48 +131,52 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 🔹 Auto-login for signup links (password recovery handled separately)
-  useEffect(() => {
-    const handleAuthCallback = async () => {
-      if (!isSupabaseConfigured() || !supabase) return;
+// 🔹 Handle auth callbacks for signup + password recovery
+useEffect(() => {
+  const handleAuthCallback = async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
 
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
 
-      let flowType =
-        url.searchParams.get('type') ||
-        url.searchParams.get('auth') ||
-        (url.hash.includes('type=recovery') ? 'recovery' : undefined);
+    let flowType =
+      url.searchParams.get('type') ||
+      url.searchParams.get('auth') ||
+      (url.hash.includes('type=recovery') ? 'recovery' : undefined);
 
-      if (!code) return;
+    // If they hit /reset-password directly with a code param
+    if (!flowType && window.location.pathname === '/reset-password') {
+      flowType = 'recovery';
+    }
 
-      if (!flowType && window.location.pathname === '/reset-password') {
-        flowType = 'recovery';
-      }
+    // Nothing to do
+    if (!code || !flowType) return;
 
-      if (flowType === 'recovery') {
-        return; // let ResetPasswordPage / handleUpdatePassword exchange the code
-      }
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
 
-      if (flowType !== 'signup') {
+    try {
+      // 1) ALWAYS exchange the code for a session (signup + recovery)
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) {
+        console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
         return;
       }
 
-      if (hasHandledAuthCallback) return;
-      hasHandledAuthCallback = true;
+      // 2) Clean up URL
+      url.searchParams.delete('code');
+      url.searchParams.delete('type');
+      url.searchParams.delete('auth');
+      window.history.replaceState({}, document.title, url.toString());
 
-      try {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) {
-          console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
-          return;
-        }
+      // 3) Recovery flow → just show ResetPasswordPage
+      if (flowType === 'recovery') {
+        setCurrentView('reset_password');
+        return;
+      }
 
-        url.searchParams.delete('code');
-        url.searchParams.delete('type');
-        url.searchParams.delete('auth');
-        window.history.replaceState({}, document.title, url.toString());
-
+      // 4) Signup flow → hydrate profile
+      if (flowType === 'signup') {
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) {
           console.error('[auth callback] getUser error:', userError);
@@ -182,13 +186,15 @@ const App: React.FC = () => {
         if (userData?.user) {
           await fetchUserProfile(userData.user.id, userData.user.email || '');
         }
-      } catch (err) {
-        console.error('[auth callback] unexpected error:', err);
       }
-    };
+    } catch (err) {
+      console.error('[auth callback] unexpected error:', err);
+    }
+  };
 
-    handleAuthCallback();
-  }, [fetchUserProfile]);
+  handleAuthCallback();
+}, [fetchUserProfile]);
+
 
   // Initialize
   useEffect(() => {
