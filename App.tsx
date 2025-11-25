@@ -154,8 +154,6 @@ useEffect(() => {
 useEffect(() => {
   const handleAuthCallback = async () => {
     if (!isSupabaseConfigured() || !supabase) return;
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
 
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
@@ -177,10 +175,18 @@ useEffect(() => {
       flowType = 'recovery';
     }
 
-    // Only handle signup + recovery flows
-    if (flowType !== 'signup' && flowType !== 'recovery') {
+    // Let the dedicated reset-password page handle recovery exchanges so the code stays available.
+    if (flowType === 'recovery') {
       return;
     }
+
+    // Only handle signup flows here; everything else is ignored.
+    if (flowType !== 'signup') {
+      return;
+    }
+
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
 
     try {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -206,11 +212,6 @@ useEffect(() => {
 
       if (userData?.user) {
         await fetchUserProfile(userData.user.id, userData.user.email || '');
-
-        // If this is a password recovery flow, immediately show the reset form
-        if (flowType === 'recovery') {
-          setCurrentView('reset_password');
-        }
       }
     } catch (err) {
       console.error('[auth callback] unexpected error:', err);
