@@ -17,13 +17,19 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    // 🔐 Enforce minimum password length
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       await onUpdatePassword(password);
       onSuccess();
     } catch (err: any) {
-      // this will show “Auth session missing” / “link expired” etc from handleUpdatePassword
       setError(err?.message || 'Something went wrong. Please request a new link.');
     } finally {
       setSubmitting(false);
@@ -37,7 +43,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
         className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-8"
       >
         <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-indigo-50 flex items-center justify-center">
-          {/* lock icon or whatever you already have */}
+          {/* lock icon here if needed */}
         </div>
         <h1 className="text-2xl font-bold text-center mb-2">Set New Password</h1>
         <p className="text-sm text-slate-500 text-center mb-6">
@@ -72,3 +78,4 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     </div>
   );
 };
+
