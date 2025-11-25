@@ -11,7 +11,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 export const supabase = (supabaseUrl && supabaseKey)
   ? createClient(supabaseUrl, supabaseKey, {
       auth: {
-        flowType: 'pkce',
+        flowType: 'implicit',
         persistSession: true,
         autoRefreshToken: true,
         // We will handle the URL manually in App.tsx
