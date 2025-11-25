@@ -141,7 +141,7 @@ useEffect(() => {
     }
   }, []);
 
- // 🔹 Auto-login for signup AND password recovery links
+// 🔹 Auto-login for signup AND password recovery links
 useEffect(() => {
   const handleAuthCallback = async () => {
     if (!isSupabaseConfigured() || !supabase) return;
@@ -150,10 +150,28 @@ useEffect(() => {
 
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
-    const type = url.searchParams.get('type'); // 'signup' | 'recovery' | etc.
 
-    // We only care about signup + recovery links that contain a code
-    if (!code || (type !== 'signup' && type !== 'recovery')) return;
+    // Supabase can send:
+    //   ?type=signup
+    //   ?type=recovery
+    //   ?auth=recovery
+    //   or put type in the hash
+    let flowType =
+      url.searchParams.get('type') ||
+      url.searchParams.get('auth') ||
+      (url.hash.includes('type=recovery') ? 'recovery' : undefined);
+
+    if (!code) return;
+
+    // If we have a reset-password route but no explicit type, treat it as recovery
+    if (!flowType && window.location.pathname === '/reset-password') {
+      flowType = 'recovery';
+    }
+
+    // Only handle signup + recovery flows
+    if (flowType !== 'signup' && flowType !== 'recovery') {
+      return;
+    }
 
     try {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -166,9 +184,10 @@ useEffect(() => {
       // Clean auth params from URL
       url.searchParams.delete('code');
       url.searchParams.delete('type');
+      url.searchParams.delete('auth');
       window.history.replaceState({}, document.title, url.toString());
 
-      // Hydrate user / profile after successful session exchange
+      // Hydrate user/profile after successful session exchange
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError) {
@@ -179,9 +198,8 @@ useEffect(() => {
       if (userData?.user) {
         await fetchUserProfile(userData.user.id, userData.user.email || '');
 
-        // If this came from a password recovery link,
-        // immediately show the reset-password form.
-        if (type === 'recovery') {
+        // If this is a password recovery flow, immediately show the reset form
+        if (flowType === 'recovery') {
           setCurrentView('reset_password');
         }
       }
@@ -192,6 +210,7 @@ useEffect(() => {
 
   handleAuthCallback();
 }, [fetchUserProfile]);
+
   // Initialize
   useEffect(() => {
     // Check for API Key
