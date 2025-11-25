@@ -154,8 +154,6 @@ useEffect(() => {
 useEffect(() => {
   const handleAuthCallback = async () => {
     if (!isSupabaseConfigured() || !supabase) return;
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
 
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
@@ -177,10 +175,18 @@ useEffect(() => {
       flowType = 'recovery';
     }
 
-    // Only handle signup + recovery flows
-    if (flowType !== 'signup' && flowType !== 'recovery') {
+    // Let the dedicated reset-password page handle recovery exchanges so the code stays available.
+    if (flowType === 'recovery') {
       return;
     }
+
+    // Only handle signup flows here; everything else is ignored.
+    if (flowType !== 'signup') {
+      return;
+    }
+
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
 
     try {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -206,11 +212,6 @@ useEffect(() => {
 
       if (userData?.user) {
         await fetchUserProfile(userData.user.id, userData.user.email || '');
-
-        // If this is a password recovery flow, immediately show the reset form
-        if (flowType === 'recovery') {
-          setCurrentView('reset_password');
-        }
       }
     } catch (err) {
       console.error('[auth callback] unexpected error:', err);
@@ -321,11 +322,28 @@ useEffect(() => {
 
   // Check for Payment Success URL Param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const hash = url.hash || '';
+    const path = url.pathname;
+
+    // If Supabase just sent us back with auth params (password recovery / signup),
+    // do not hijack the view for the payment success screen.
+    const isAuthCallback =
+      params.has('code') ||
+      params.get('auth') === 'recovery' ||
+      params.get('type') === 'recovery' ||
+      hash.includes('type=recovery') ||
+      path === '/reset-password';
+
+    if (isAuthCallback) {
+      return;
+    }
+
     if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
       setCurrentView('payment_success');
       // Clean URL but keep view state
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', path);
     }
   }, []);
 
