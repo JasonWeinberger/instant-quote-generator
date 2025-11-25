@@ -77,24 +77,24 @@ const App: React.FC = () => {
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
-// Check for Reset Password route on mount (handles /reset-password and ?auth=recovery)
-useEffect(() => {
-  const url = new URL(window.location.href);
-  const path = url.pathname;
-  const search = url.search;
-  const hash = url.hash;
+  // Check for Reset Password route on mount (handles /reset-password and ?auth=recovery)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const path = url.pathname;
+    const search = url.search;
+    const hash = url.hash;
 
-  const isRecovery =
-    path === '/reset-password' ||
-    url.searchParams.get('auth') === 'recovery' ||
-    url.searchParams.get('type') === 'recovery' ||
-    search.includes('type=recovery') ||
-    hash.includes('type=recovery');
+    const isRecovery =
+      path === '/reset-password' ||
+      url.searchParams.get('auth') === 'recovery' ||
+      url.searchParams.get('type') === 'recovery' ||
+      search.includes('type=recovery') ||
+      hash.includes('type=recovery');
 
-  if (isRecovery) {
-    setCurrentView('reset_password');
-  }
-}, []);
+    if (isRecovery) {
+      setCurrentView('reset_password');
+    }
+  }, []);
 
   // 🔹 Any Supabase user = active Pro user
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
@@ -150,64 +150,64 @@ useEffect(() => {
     }
   }, []);
 
-// 🔹 Auto-login for signup links (password recovery handled separately)
-useEffect(() => {
-  const handleAuthCallback = async () => {
-    if (!isSupabaseConfigured() || !supabase) return;
+  // 🔹 Auto-login for signup links (password recovery handled separately)
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
 
-    let flowType =
-      url.searchParams.get('type') ||
-      url.searchParams.get('auth') ||
-      (url.hash.includes('type=recovery') ? 'recovery' : undefined);
+      let flowType =
+        url.searchParams.get('type') ||
+        url.searchParams.get('auth') ||
+        (url.hash.includes('type=recovery') ? 'recovery' : undefined);
 
-    if (!code) return;
+      if (!code) return;
 
-    if (!flowType && window.location.pathname === '/reset-password') {
-      flowType = 'recovery';
-    }
+      if (!flowType && window.location.pathname === '/reset-password') {
+        flowType = 'recovery';
+      }
 
-    if (flowType === 'recovery') {
-      return; // let ResetPasswordPage exchange the code
-    }
+      if (flowType === 'recovery') {
+        return; // let ResetPasswordPage / handleUpdatePassword exchange the code
+      }
 
-    if (flowType !== 'signup') {
-      return;
-    }
-
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
-
-    try {
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      if (exchangeError) {
-        console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+      if (flowType !== 'signup') {
         return;
       }
 
-      url.searchParams.delete('code');
-      url.searchParams.delete('type');
-      url.searchParams.delete('auth');
-      window.history.replaceState({}, document.title, url.toString());
+      if (hasHandledAuthCallback) return;
+      hasHandledAuthCallback = true;
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.error('[auth callback] getUser error:', userError);
-        return;
+      try {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+          return;
+        }
+
+        url.searchParams.delete('code');
+        url.searchParams.delete('type');
+        url.searchParams.delete('auth');
+        window.history.replaceState({}, document.title, url.toString());
+
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('[auth callback] getUser error:', userError);
+          return;
+        }
+
+        if (userData?.user) {
+          await fetchUserProfile(userData.user.id, userData.user.email || '');
+        }
+      } catch (err) {
+        console.error('[auth callback] unexpected error:', err);
       }
+    };
 
-      if (userData?.user) {
-        await fetchUserProfile(userData.user.id, userData.user.email || '');
-      }
-    } catch (err) {
-      console.error('[auth callback] unexpected error:', err);
-    }
-  };
-
-  handleAuthCallback();
-}, [fetchUserProfile]);
+    handleAuthCallback();
+  }, [fetchUserProfile]);
 
   // Initialize
   useEffect(() => {
@@ -249,7 +249,8 @@ useEffect(() => {
       const session = sessionRes.data.session;
       if (session) {
         const isRecovery =
-          window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+          window.location.hash.includes('type=recovery') ||
+          window.location.pathname === '/reset-password';
         if (!isRecovery) {
           await fetchUserProfile(session.user.id, session.user.email || '');
         }
@@ -258,7 +259,8 @@ useEffect(() => {
 
     const authListener = client.auth.onAuthStateChange(async (event, session) => {
       const isRecovery =
-        window.location.hash.includes('type=recovery') || window.location.pathname === '/reset-password';
+        window.location.hash.includes('type=recovery') ||
+        window.location.pathname === '/reset-password';
 
       if (event === 'PASSWORD_RECOVERY' || isRecovery) {
         setCurrentView('reset_password');
@@ -309,28 +311,28 @@ useEffect(() => {
   }, [fetchUserProfile]);
 
   // Check for Payment Success URL Param
-useEffect(() => {
-  const url = new URL(window.location.href);
-  const params = url.searchParams;
-  const hash = url.hash || '';
-  const path = url.pathname;
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const hash = url.hash || '';
+    const path = url.pathname;
 
-  const isAuthCallback =
-    params.has('code') ||
-    params.get('auth') === 'recovery' ||
-    params.get('type') === 'recovery' ||
-    hash.includes('type=recovery') ||
-    path === '/reset-password';
+    const isAuthCallback =
+      params.has('code') ||
+      params.get('auth') === 'recovery' ||
+      params.get('type') === 'recovery' ||
+      hash.includes('type=recovery') ||
+      path === '/reset-password';
 
-  if (isAuthCallback) {
-    return;
-  }
+    if (isAuthCallback) {
+      return;
+    }
 
-  if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
-    setCurrentView('payment_success');
-    window.history.replaceState({}, '', path);
-  }
-}, []);
+    if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
+      setCurrentView('payment_success');
+      window.history.replaceState({}, '', path);
+    }
+  }, []);
 
   useEffect(() => {
     if (result && resultRef.current) {
@@ -339,7 +341,8 @@ useEffect(() => {
   }, [result]);
 
   const isLimitReached = user?.status !== 'active' && usageCount >= MAX_FREE_QUOTES;
-  const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
+  const quotesRemaining =
+    user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
   const handleUpgradeClick = () => {
     setShowEmailModal(true);
@@ -457,11 +460,55 @@ useEffect(() => {
     }
   };
 
+  // 🔐 Bulletproof password update: ensure we have a session, exchange code if needed
   const handleUpdatePassword = async (password: string) => {
-    if (supabase) {
-      const client = supabase!;
-      const { error } = await client.auth.updateUser({ password: password });
-      if (error) throw error;
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
+
+    const client = supabase!;
+
+    // 1) Check for existing session
+    let { data: sessionData, error: sessionError } = await client.auth.getSession();
+
+    if (sessionError) {
+      console.error('[reset password] getSession error:', sessionError);
+    }
+
+    // 2) No session? Try to exchange the code in the URL
+    if (!sessionData?.session) {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+
+      if (code) {
+        console.log('[reset password] no session, trying exchangeCodeForSession');
+        const {
+          data: exchangeData,
+          error: exchangeError,
+        } = await client.auth.exchangeCodeForSession(code);
+
+        if (exchangeError) {
+          console.error('[reset password] exchangeCodeForSession error:', exchangeError);
+          throw new Error(exchangeError.message || 'Could not validate reset link.');
+        }
+
+        sessionData = { session: exchangeData.session };
+      }
+    }
+
+    // 3) Still no session → invalid/expired link
+    if (!sessionData?.session) {
+      throw new Error(
+        'This reset link is invalid or has expired. Please request a new one.'
+      );
+    }
+
+    // 4) We have a session, actually update password
+    const { error } = await client.auth.updateUser({ password });
+
+    if (error) {
+      console.error('[reset password] updateUser error:', error);
+      throw new Error(error.message || 'Could not update password. Please try again.');
     }
   };
 
@@ -518,7 +565,10 @@ useEffect(() => {
             throw upsertError;
           }
 
-          await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
+          await fetchUserProfile(
+            sessionData.session.user.id,
+            sessionData.session.user.email || ''
+          );
           localStorage.removeItem('pendingUpgradeEmail');
           localStorage.removeItem('pendingUpgradePassword');
           console.log('[activate] DONE (existing session)');
@@ -562,7 +612,9 @@ useEffect(() => {
 
         // Handle Email Confirmation Required (User returned but no Session)
         if (signUpData.user && !signUpData.session) {
-          console.log('[activate] signUp successful but no session (email confirmation required)');
+          console.log(
+            '[activate] signUp successful but no session (email confirmation required)'
+          );
           return { result: 'email_confirmation_required' };
         }
 
@@ -628,16 +680,17 @@ useEffect(() => {
 
   // --- VIEWS ---
 
-if (currentView === 'reset_password') {
-  return (
-    <ResetPasswordPage
-      onSuccess={() => {
-        window.history.replaceState(null, '', '/');
-        setCurrentView('landing');
-      }}
-    />
-  );
-}
+  if (currentView === 'reset_password') {
+    return (
+      <ResetPasswordPage
+        onSuccess={() => {
+          window.history.replaceState(null, '', '/');
+          setCurrentView('landing');
+        }}
+        onUpdatePassword={handleUpdatePassword}
+      />
+    );
+  }
 
   if (currentView === 'payment_success') {
     return <PaymentSuccessPage user={user} onActivate={handlePaymentSuccessActivation} />;
@@ -742,7 +795,9 @@ if (currentView === 'reset_password') {
                     {user.email.substring(0, 2).toUpperCase()}
                   </div>
                   <div className="flex flex-col items-start">
-                    <span className="text-xs font-bold text-slate-900 leading-none">Account</span>
+                    <span className="text-xs font-bold text-slate-900 leading-none">
+                      Account
+                    </span>
                     <span
                       className={`text-[10px] font-medium leading-none mt-0.5 ${
                         user.status === 'active' ? 'text-indigo-600' : 'text-slate-500'
@@ -843,11 +898,12 @@ if (currentView === 'reset_password') {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center max-w-3xl mx-auto mb-10">
             <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-6 leading-tight">
-              Generate Accurate Job Quotes <span className="text-indigo-600">in Seconds.</span>
+              Generate Accurate Job Quotes{' '}
+              <span className="text-indigo-600">in Seconds.</span>
             </h1>
             <p className="text-xl text-slate-500 mb-8 leading-relaxed">
-              Stop losing evenings to paperwork. Select your trade, describe the job, and get a clean, itemized
-              estimate instantly.
+              Stop losing evenings to paperwork. Select your trade, describe the job, and
+              get a clean, itemized estimate instantly.
             </p>
           </div>
 
@@ -967,8 +1023,8 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
               <h2 className="text-3xl font-bold text-slate-900 mb-4">Your Estimate is Ready!</h2>
               <p className="text-slate-500">
                 Based on market rates for{' '}
-                <span className="font-bold text-slate-900">{zipCode || 'National Avg'}</span>. Review and edit the
-                costs below before sending.
+                <span className="font-bold text-slate-900">{zipCode || 'National Avg'}</span>.
+                Review and edit the costs below before sending.
               </p>
             </div>
             <QuoteResultCard result={result} user={user} />
@@ -979,7 +1035,9 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
       <div ref={featuresRef} className="py-24 bg-white border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Everything you need to win more jobs.</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">
+              Everything you need to win more jobs.
+            </h2>
             <p className="text-lg text-slate-500">
               Built for contractors who want to spend less time quoting and more time building.
             </p>
@@ -1173,14 +1231,22 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                   <Zap size={32} className="text-white" />
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Usage Limit Reached</h2>
-                <p className="text-indigo-100">You've used all {MAX_FREE_QUOTES} free quotes for today.</p>
+                <p className="text-indigo-100">
+                  You've used all {MAX_FREE_QUOTES} free quotes for today.
+                </p>
               </div>
             </div>
 
             <div className="p-8 text-center">
-              <h3 className="text-lg font-bold text-slate-900 mb-4">Upgrade for Unlimited Access</h3>
+              <h3 className="text-lg font-bold text-slate-900 mb-4">
+                Upgrade for Unlimited Access
+              </h3>
               <ul className="text-left space-y-3 mb-8 max-w-xs mx-auto">
-                {['Unlimited AI Estimates', 'Save & Export History', 'Company Branding on Quotes'].map((feat, i) => (
+                {[
+                  'Unlimited AI Estimates',
+                  'Save & Export History',
+                  'Company Branding on Quotes',
+                ].map((feat, i) => (
                   <li key={i} className="flex items-center gap-3 text-slate-600">
                     <Check size={16} className="text-green-500 shrink-0" />
                     <span className="text-sm">{feat}</span>
@@ -1205,3 +1271,4 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
 };
 
 export default App;
+
