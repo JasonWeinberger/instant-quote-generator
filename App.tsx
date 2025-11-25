@@ -150,21 +150,14 @@ useEffect(() => {
     }
   }, []);
 
-// 🔹 Auto-login for signup AND password recovery links
+// 🔹 Auto-login for signup links (password recovery handled separately)
 useEffect(() => {
   const handleAuthCallback = async () => {
     if (!isSupabaseConfigured() || !supabase) return;
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
 
     const url = new URL(window.location.href);
     const code = url.searchParams.get('code');
 
-    // Supabase can send:
-    //   ?type=signup
-    //   ?type=recovery
-    //   ?auth=recovery
-    //   or put type in the hash
     let flowType =
       url.searchParams.get('type') ||
       url.searchParams.get('auth') ||
@@ -172,33 +165,34 @@ useEffect(() => {
 
     if (!code) return;
 
-    // If we have a reset-password route but no explicit type, treat it as recovery
     if (!flowType && window.location.pathname === '/reset-password') {
       flowType = 'recovery';
     }
 
-    // Only handle signup + recovery flows
-    if (flowType !== 'signup' && flowType !== 'recovery') {
+    if (flowType === 'recovery') {
+      return; // let ResetPasswordPage exchange the code
+    }
+
+    if (flowType !== 'signup') {
       return;
     }
 
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
+
     try {
       const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
       if (exchangeError) {
         console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
         return;
       }
 
-      // Clean auth params from URL
       url.searchParams.delete('code');
       url.searchParams.delete('type');
       url.searchParams.delete('auth');
       window.history.replaceState({}, document.title, url.toString());
 
-      // Hydrate user/profile after successful session exchange
       const { data: userData, error: userError } = await supabase.auth.getUser();
-
       if (userError) {
         console.error('[auth callback] getUser error:', userError);
         return;
@@ -206,11 +200,6 @@ useEffect(() => {
 
       if (userData?.user) {
         await fetchUserProfile(userData.user.id, userData.user.email || '');
-
-        // If this is a password recovery flow, immediately show the reset form
-        if (flowType === 'recovery') {
-          setCurrentView('reset_password');
-        }
       }
     } catch (err) {
       console.error('[auth callback] unexpected error:', err);
@@ -320,14 +309,28 @@ useEffect(() => {
   }, [fetchUserProfile]);
 
   // Check for Payment Success URL Param
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
-      setCurrentView('payment_success');
-      // Clean URL but keep view state
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
+useEffect(() => {
+  const url = new URL(window.location.href);
+  const params = url.searchParams;
+  const hash = url.hash || '';
+  const path = url.pathname;
+
+  const isAuthCallback =
+    params.has('code') ||
+    params.get('auth') === 'recovery' ||
+    params.get('type') === 'recovery' ||
+    hash.includes('type=recovery') ||
+    path === '/reset-password';
+
+  if (isAuthCallback) {
+    return;
+  }
+
+  if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
+    setCurrentView('payment_success');
+    window.history.replaceState({}, '', path);
+  }
+}, []);
 
   useEffect(() => {
     if (result && resultRef.current) {
