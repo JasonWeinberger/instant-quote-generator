@@ -628,16 +628,16 @@ useEffect(() => {
 
   // --- VIEWS ---
 
-  if (currentView === 'reset_password') {
-    return (
-      <ResetPasswordPage
-        onSuccess={() => {
-          window.history.replaceState(null, '', '/');
-          setCurrentView('landing');
-        }}
-      />
-    );
-  }
+if (currentView === 'reset_password') {
+  return (
+    <ResetPasswordPage
+      onSuccess={() => {
+        window.history.replaceState(null, '', '/');
+        setCurrentView('landing');
+      }}
+    />
+  );
+}
 
   if (currentView === 'payment_success') {
     return <PaymentSuccessPage user={user} onActivate={handlePaymentSuccessActivation} />;
