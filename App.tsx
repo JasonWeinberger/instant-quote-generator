@@ -170,6 +170,11 @@ const App: React.FC = () => {
       const code = search.get('code');
       const accessToken = search.get('access_token') || getHashParam('access_token');
       const refreshToken = search.get('refresh_token') || getHashParam('refresh_token');
+      const tokenHash =
+        search.get('token_hash') ||
+        getHashParam('token_hash') ||
+        search.get('token') ||
+        getHashParam('token');
 
       // Detect flow type from query or hash
       let flowType =
@@ -215,6 +220,8 @@ const App: React.FC = () => {
           'refresh_token',
           'expires_in',
           'token_type',
+          'token_hash',
+          'token',
         ];
 
         paramsToDelete.forEach((param) => {
@@ -276,6 +283,40 @@ const App: React.FC = () => {
         if (!tokenHandled) {
           hasHandledAuthCallback = false;
         }
+        return;
+      }
+
+      if (tokenHash) {
+        if (hasHandledAuthCallback) return;
+        hasHandledAuthCallback = true;
+
+        const otpType: 'signup' | 'magiclink' | 'invite' =
+          flowType === 'magiclink' ? 'magiclink' : flowType === 'invite' ? 'invite' : 'signup';
+
+        try {
+          const { data, error } = await client.auth.verifyOtp({
+            type: otpType,
+            token_hash: tokenHash,
+          });
+
+          if (error) {
+            console.error('[auth callback] verifyOtp error:', error);
+            return;
+          }
+
+          cleanAuthParams();
+
+          const sessionUser =
+            data.session?.user ||
+            (await client.auth.getUser().then((res) => (res.error ? null : res.data.user)));
+
+          if (sessionUser) {
+            await fetchUserProfile(sessionUser.id, sessionUser.email || '');
+          }
+        } catch (otpErr) {
+          console.error('[auth callback] unexpected verifyOtp error:', otpErr);
+        }
+
         return;
       }
 
