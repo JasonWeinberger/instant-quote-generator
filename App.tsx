@@ -77,23 +77,14 @@ const App: React.FC = () => {
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
-// Check for Reset Password URL on Mount
+// Check for Reset Password route on mount
 useEffect(() => {
-  if (typeof window === 'undefined') return;
-
-  const path = window.location.pathname || '';
-  const search = window.location.search || '';
-  const hash = window.location.hash || '';
-
-  const isRecovery =
-    search.includes('type=recovery') ||
-    hash.includes('type=recovery') ||
-    path.toLowerCase().includes('reset-password');
-
-  if (isRecovery) {
+  const path = window.location.pathname;
+  if (path === '/reset-password') {
     setCurrentView('reset_password');
   }
 }, []);
+
 
 
   // 🔹 Any Supabase user = active Pro user
@@ -150,54 +141,57 @@ useEffect(() => {
     }
   }, []);
 
-  // 🔹 Auto-login after email confirmation (signup only)
-  useEffect(() => {
-    const handleAuthCallback = async () => {
-      if (!isSupabaseConfigured() || !supabase) return;
-      if (hasHandledAuthCallback) return;
-      hasHandledAuthCallback = true;
+ // 🔹 Auto-login for signup AND password recovery links
+useEffect(() => {
+  const handleAuthCallback = async () => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    if (hasHandledAuthCallback) return;
+    hasHandledAuthCallback = true;
 
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
-      const type = url.searchParams.get('type'); // 'signup', 'recovery', etc.
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    const type = url.searchParams.get('type'); // 'signup' | 'recovery' | etc.
 
-      // Only auto-login for signup confirmation links from email
-      if (!code || type !== 'signup') return;
+    // We only care about signup + recovery links that contain a code
+    if (!code || (type !== 'signup' && type !== 'recovery')) return;
 
-      try {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    try {
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
-        if (exchangeError) {
-          console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
-          return;
-        }
-
-        // Clean auth params from URL
-        url.searchParams.delete('code');
-        url.searchParams.delete('type');
-        window.history.replaceState({}, document.title, url.toString());
-
-        // Hydrate user/profile after successful session exchange
-        const userRes = await supabase.auth.getUser();
-        const userError = userRes.error;
-        const userData = userRes.data;
-
-        if (userError) {
-          console.error('[auth callback] getUser error:', userError);
-          return;
-        }
-
-        if (userData?.user) {
-          await fetchUserProfile(userData.user.id, userData.user.email || '');
-        }
-      } catch (err) {
-        console.error('[auth callback] unexpected error:', err);
+      if (exchangeError) {
+        console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+        return;
       }
-    };
 
-    handleAuthCallback();
-  }, [fetchUserProfile]);
+      // Clean auth params from URL
+      url.searchParams.delete('code');
+      url.searchParams.delete('type');
+      window.history.replaceState({}, document.title, url.toString());
 
+      // Hydrate user / profile after successful session exchange
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('[auth callback] getUser error:', userError);
+        return;
+      }
+
+      if (userData?.user) {
+        await fetchUserProfile(userData.user.id, userData.user.email || '');
+
+        // If this came from a password recovery link,
+        // immediately show the reset-password form.
+        if (type === 'recovery') {
+          setCurrentView('reset_password');
+        }
+      }
+    } catch (err) {
+      console.error('[auth callback] unexpected error:', err);
+    }
+  };
+
+  handleAuthCallback();
+}, [fetchUserProfile]);
   // Initialize
   useEffect(() => {
     // Check for API Key
