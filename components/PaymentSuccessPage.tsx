@@ -1,13 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Check, Loader2, AlertCircle, ArrowRight, LogIn, Mail } from 'lucide-react';
 import { User } from '../shared-types';
-import { createClient } from '@supabase/supabase-js';
-
-// Create Supabase client
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!
-);
+import { supabase as sharedSupabase } from '../lib/supabase';
 
 interface PaymentSuccessPageProps {
   user: User | null;
@@ -50,13 +44,22 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user }) 
 
     setTargetEmail(email);
 
+    const client = sharedSupabase;
+
+    if (!client) {
+      console.error('[PaymentSuccessPage] Supabase client unavailable.');
+      setStatus('error');
+      setErrorMessage('Unable to activate your account. Please contact support.');
+      return;
+    }
+
     const executeSignUp = async () => {
       try {
         console.log('[PaymentSuccessPage] calling supabase.auth.signUp to send activation email');
 
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await client.auth.signUp({
           email,
-          password
+          password,
         });
 
         // Clean up stored values regardless of outcome
@@ -96,7 +99,7 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user }) 
     };
 
     executeSignUp();
-  }, [user?.email]);
+  }, [user?.email, sharedSupabase]);
 
   // --- UI States ---
 

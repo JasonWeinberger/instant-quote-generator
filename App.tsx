@@ -154,17 +154,28 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleAuthCallback = async () => {
       if (!isSupabaseConfigured() || !supabase) return;
+      const client = supabase;
+      if (!client) return;
 
       const url = new URL(window.location.href);
       const search = url.searchParams;
       const hash = url.hash || '';
+      const hashValue = hash.startsWith('#') ? hash.slice(1) : hash;
+      const hashParams =
+        hashValue && hashValue.includes('=')
+          ? new URLSearchParams(hashValue)
+          : null;
+      const getHashParam = (key: string) => hashParams?.get(key) || null;
 
       const code = search.get('code');
+      const accessToken = search.get('access_token') || getHashParam('access_token');
+      const refreshToken = search.get('refresh_token') || getHashParam('refresh_token');
 
       // Detect flow type from query or hash
       let flowType =
         search.get('type') ||
         search.get('auth') ||
+        getHashParam('type') ||
         (hash.includes('type=recovery') ? 'recovery' : undefined);
 
       // Supabase may send error params when link is expired/invalid
@@ -174,11 +185,7 @@ const App: React.FC = () => {
         return;
       }
 
-      // No code, nothing to do
-      if (!code) return;
-
-      // If we have a code but no explicit type, treat it as signup/confirmation
-      if (!flowType) {
+      if (!flowType && (code || accessToken)) {
         flowType = 'signup';
       }
 
@@ -196,30 +203,99 @@ const App: React.FC = () => {
         return;
       }
 
+      const cleanAuthParams = () => {
+        const paramsToDelete = [
+          'code',
+          'type',
+          'auth',
+          'error',
+          'error_code',
+          'error_description',
+          'access_token',
+          'refresh_token',
+          'expires_in',
+          'token_type',
+        ];
+
+        paramsToDelete.forEach((param) => {
+          search.delete(param);
+          hashParams?.delete(param);
+        });
+
+        const cleanedSearch = search.toString();
+        const cleanedHashSegment =
+          hashParams !== null ? hashParams.toString() : null;
+        const finalHash =
+          hashParams !== null
+            ? cleanedHashSegment
+              ? `#${cleanedHashSegment}`
+              : ''
+            : hash;
+
+        const cleanedUrl =
+          url.pathname + (cleanedSearch ? `?${cleanedSearch}` : '') + finalHash;
+
+        window.history.replaceState({}, document.title, cleanedUrl);
+      };
+
+      const handleTokenSession = async () => {
+        if (!accessToken || !refreshToken) {
+          return false;
+        }
+
+        try {
+          const { data, error } = await client.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            console.error('[auth callback] setSession error:', error);
+            return false;
+          }
+
+          cleanAuthParams();
+
+          const sessionUser = data.session?.user;
+          if (sessionUser) {
+            await fetchUserProfile(sessionUser.id, sessionUser.email || '');
+          }
+
+          return true;
+        } catch (tokenErr) {
+          console.error('[auth callback] implicit session error:', tokenErr);
+          return false;
+        }
+      };
+
+      if (accessToken && refreshToken) {
+        if (hasHandledAuthCallback) return;
+
+        hasHandledAuthCallback = true;
+        const tokenHandled = await handleTokenSession();
+        if (!tokenHandled) {
+          hasHandledAuthCallback = false;
+        }
+        return;
+      }
+
+      if (!code) return;
+
       if (hasHandledAuthCallback) return;
       hasHandledAuthCallback = true;
 
       try {
         // Exchange the code for a session (logs the user in)
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
         if (exchangeError) {
           console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
           return;
         }
 
-        // Clean up URL (remove auth params and errors)
-        search.delete('code');
-        search.delete('type');
-        search.delete('auth');
-        search.delete('error');
-        search.delete('error_code');
-        search.delete('error_description');
-        const cleanedUrl =
-          url.pathname + (search.toString() ? `?${search.toString()}` : '') + hash;
-        window.history.replaceState({}, document.title, cleanedUrl);
+        cleanAuthParams();
 
         // Hydrate profile
-        const { data: userData, error: userError } = await supabase.auth.getUser();
+        const { data: userData, error: userError } = await client.auth.getUser();
         if (userError) {
           console.error('[auth callback] getUser error:', userError);
           return;
@@ -498,6 +574,15 @@ const App: React.FC = () => {
     }
 
     const client = supabase!;
+    const url = new URL(window.location.href);
+    const search = url.searchParams;
+    const hash = url.hash || '';
+    const hashValue = hash.startsWith('#') ? hash.slice(1) : hash;
+    const hashParams =
+      hashValue && hashValue.includes('=')
+        ? new URLSearchParams(hashValue)
+        : null;
+    const getHashParam = (key: string) => hashParams?.get(key) || null;
 
     // 1) Check for existing session
     let { data: sessionData, error: sessionError } = await client.auth.getSession();
@@ -506,10 +591,9 @@ const App: React.FC = () => {
       console.error('[reset password] getSession error:', sessionError);
     }
 
-    // 2) No session? Try to exchange the code in the URL
+    // 2) No session? Try to exchange the code or tokens in the URL
     if (!sessionData?.session) {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get('code');
+      const code = search.get('code');
 
       if (code) {
         console.log('[reset password] no session, trying exchangeCodeForSession');
@@ -524,6 +608,27 @@ const App: React.FC = () => {
         }
 
         sessionData = { session: exchangeData.session };
+      } else {
+        const accessToken = search.get('access_token') || getHashParam('access_token');
+        const refreshToken = search.get('refresh_token') || getHashParam('refresh_token');
+
+        if (accessToken && refreshToken) {
+          console.log('[reset password] no session, setting session from hash tokens');
+          const {
+            data: tokenData,
+            error: tokenError,
+          } = await client.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (tokenError) {
+            console.error('[reset password] setSession error:', tokenError);
+            throw new Error(tokenError.message || 'Could not validate reset link.');
+          }
+
+          sessionData = { session: tokenData.session };
+        }
       }
     }
 
