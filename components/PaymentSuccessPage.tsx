@@ -66,10 +66,21 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user }) 
         if (error) {
           console.error('[PaymentSuccessPage] signUp error:', error);
 
-          // If the user already exists, just tell them to log in
           const msg = error.message.toLowerCase();
+
+          // If the user already exists, just tell them to log in
           if (msg.includes('user already registered') || msg.includes('already registered')) {
             setStatus('existing_user');
+            return;
+          }
+
+          // Supabase throttles outbound emails. If we hit that, it means the
+          // confirmation email was just sent, so treat it like success and let
+          // the user know to check their inbox.
+          if (msg.includes('rate limit')) {
+            console.log('[PaymentSuccessPage] treating rate limit as email confirmation state');
+            setStatus('email_confirmation_required');
+            setErrorMessage(null);
             return;
           }
 

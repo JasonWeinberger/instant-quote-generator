@@ -321,11 +321,28 @@ useEffect(() => {
 
   // Check for Payment Success URL Param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+    const hash = url.hash || '';
+    const path = url.pathname;
+
+    // If Supabase just sent us back with auth params (password recovery / signup),
+    // do not hijack the view for the payment success screen.
+    const isAuthCallback =
+      params.has('code') ||
+      params.get('auth') === 'recovery' ||
+      params.get('type') === 'recovery' ||
+      hash.includes('type=recovery') ||
+      path === '/reset-password';
+
+    if (isAuthCallback) {
+      return;
+    }
+
     if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
       setCurrentView('payment_success');
       // Clean URL but keep view state
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', path);
     }
   }, []);
 
