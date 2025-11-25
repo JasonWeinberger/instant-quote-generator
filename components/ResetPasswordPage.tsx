@@ -1,7 +1,7 @@
 // components/ResetPasswordPage.tsx
 import React, { useState } from 'react';
 
-interface ResetPasswordPageProps {
+export interface ResetPasswordPageProps {
   onSuccess: () => void;
   onUpdatePassword: (password: string) => Promise<void>;
 }
@@ -18,7 +18,6 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     e.preventDefault();
     setError(null);
 
-    // 🔐 Enforce minimum password length
     if (password.length < 6) {
       setError('Password must be at least 6 characters long.');
       return;
@@ -43,7 +42,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
         className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-8"
       >
         <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-indigo-50 flex items-center justify-center">
-          {/* lock icon here if needed */}
+          {/* add lock icon if you want */}
         </div>
         <h1 className="text-2xl font-bold text-center mb-2">Set New Password</h1>
         <p className="text-sm text-slate-500 text-center mb-6">
@@ -78,4 +77,3 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     </div>
   );
 };
-
