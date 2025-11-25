@@ -77,25 +77,6 @@ const App: React.FC = () => {
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
-  // Check for Reset Password route on mount (handles /reset-password and ?auth=recovery)
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const path = url.pathname;
-    const search = url.search;
-    const hash = url.hash;
-
-    const isRecovery =
-      path === '/reset-password' ||
-      url.searchParams.get('auth') === 'recovery' ||
-      url.searchParams.get('type') === 'recovery' ||
-      search.includes('type=recovery') ||
-      hash.includes('type=recovery');
-
-    if (isRecovery) {
-      setCurrentView('reset_password');
-    }
-  }, []);
-
   // 🔹 Any Supabase user = active Pro user
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
     if (!supabase) return;
