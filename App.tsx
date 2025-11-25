@@ -77,6 +77,25 @@ const App: React.FC = () => {
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
+  // Check for Reset Password route on mount (handles /reset-password and ?auth=recovery)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const path = url.pathname;
+    const search = url.search;
+    const hash = url.hash;
+
+    const isRecovery =
+      path === '/reset-password' ||
+      url.searchParams.get('auth') === 'recovery' ||
+      url.searchParams.get('type') === 'recovery' ||
+      search.includes('type=recovery') ||
+      hash.includes('type=recovery');
+
+    if (isRecovery) {
+      setCurrentView('reset_password');
+    }
+  }, []);
+
   // 🔹 Any Supabase user = active Pro user
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
     if (!supabase) return;
@@ -131,52 +150,75 @@ const App: React.FC = () => {
     }
   }, []);
 
-// 🔹 Handle auth callbacks for signup + password recovery
-useEffect(() => {
-  const handleAuthCallback = async () => {
-    if (!isSupabaseConfigured() || !supabase) return;
+  // 🔹 Auto-login for signup / confirmation / magic links (password recovery handled separately)
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      if (!isSupabaseConfigured() || !supabase) return;
 
-    const url = new URL(window.location.href);
-    const code = url.searchParams.get('code');
+      const url = new URL(window.location.href);
+      const search = url.searchParams;
+      const hash = url.hash || '';
 
-    let flowType =
-      url.searchParams.get('type') ||
-      url.searchParams.get('auth') ||
-      (url.hash.includes('type=recovery') ? 'recovery' : undefined);
+      const code = search.get('code');
 
-    // If they hit /reset-password directly with a code param
-    if (!flowType && window.location.pathname === '/reset-password') {
-      flowType = 'recovery';
-    }
+      // Detect flow type from query or hash
+      let flowType =
+        search.get('type') ||
+        search.get('auth') ||
+        (hash.includes('type=recovery') ? 'recovery' : undefined);
 
-    // Nothing to do
-    if (!code || !flowType) return;
-
-    if (hasHandledAuthCallback) return;
-    hasHandledAuthCallback = true;
-
-    try {
-      // 1) ALWAYS exchange the code for a session (signup + recovery)
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      if (exchangeError) {
-        console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+      // Supabase may send error params when link is expired/invalid
+      const errorCode = search.get('error_code');
+      if (errorCode) {
+        console.warn('[auth callback] Supabase returned error_code:', errorCode);
         return;
       }
 
-      // 2) Clean up URL
-      url.searchParams.delete('code');
-      url.searchParams.delete('type');
-      url.searchParams.delete('auth');
-      window.history.replaceState({}, document.title, url.toString());
+      // No code, nothing to do
+      if (!code) return;
 
-      // 3) Recovery flow → just show ResetPasswordPage
+      // If we have a code but no explicit type, treat it as signup/confirmation
+      if (!flowType) {
+        flowType = 'signup';
+      }
+
+      // Recovery links are handled by ResetPasswordPage + handleUpdatePassword
       if (flowType === 'recovery') {
-        setCurrentView('reset_password');
         return;
       }
 
-      // 4) Signup flow → hydrate profile
-      if (flowType === 'signup') {
+      const shouldHandle =
+        flowType === 'signup' ||
+        flowType === 'magiclink' ||
+        flowType === 'invite';
+
+      if (!shouldHandle) {
+        return;
+      }
+
+      if (hasHandledAuthCallback) return;
+      hasHandledAuthCallback = true;
+
+      try {
+        // Exchange the code for a session (logs the user in)
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) {
+          console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+          return;
+        }
+
+        // Clean up URL (remove auth params and errors)
+        search.delete('code');
+        search.delete('type');
+        search.delete('auth');
+        search.delete('error');
+        search.delete('error_code');
+        search.delete('error_description');
+        const cleanedUrl =
+          url.pathname + (search.toString() ? `?${search.toString()}` : '') + hash;
+        window.history.replaceState({}, document.title, cleanedUrl);
+
+        // Hydrate profile
         const { data: userData, error: userError } = await supabase.auth.getUser();
         if (userError) {
           console.error('[auth callback] getUser error:', userError);
@@ -186,15 +228,13 @@ useEffect(() => {
         if (userData?.user) {
           await fetchUserProfile(userData.user.id, userData.user.email || '');
         }
+      } catch (err) {
+        console.error('[auth callback] unexpected error:', err);
       }
-    } catch (err) {
-      console.error('[auth callback] unexpected error:', err);
-    }
-  };
+    };
 
-  handleAuthCallback();
-}, [fetchUserProfile]);
-
+    handleAuthCallback();
+  }, [fetchUserProfile]);
 
   // Initialize
   useEffect(() => {
@@ -267,7 +307,11 @@ useEffect(() => {
 
           // This still syncs metadata for users created via the Stripe → Email flow,
           // but fetchUserProfile will force them to active/pro anyway.
-          if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
+          if (
+            pendingEmail &&
+            sessionEmail &&
+            pendingEmail.toLowerCase() === sessionEmail.toLowerCase()
+          ) {
             await client.auth.updateUser({
               data: { status: 'active', plan: 'pro' },
             });
@@ -1258,4 +1302,3 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
 };
 
 export default App;
-
