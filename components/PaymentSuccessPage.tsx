@@ -63,13 +63,20 @@ export const PaymentSuccessPage: React.FC<PaymentSuccessPageProps> = ({ user }) 
         localStorage.removeItem('pendingUpgradeEmail');
         localStorage.removeItem('pendingUpgradePassword');
 
-        if (error) {
+   if (error) {
           console.error('[PaymentSuccessPage] signUp error:', error);
 
-          // If the user already exists, just tell them to log in
           const msg = error.message.toLowerCase();
+
           if (msg.includes('user already registered') || msg.includes('already registered')) {
             setStatus('existing_user');
+            return;
+          }
+
+          if (msg.includes('rate limit')) {
+            console.log('[PaymentSuccessPage] treating rate limit as email confirmation state');
+            setStatus('email_confirmation_required');
+            setErrorMessage(null);
             return;
           }
 
