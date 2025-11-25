@@ -29,8 +29,10 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
       await onUpdatePassword(password);
       onSuccess();
     } catch (err: any) {
+      // Show Supabase error (invalid/expired link, missing session, etc.)
       setError(err?.message || 'Something went wrong. Please request a new link.');
     } finally {
+      // 🔥 ensures the field & button are re-enabled after ANY outcome
       setSubmitting(false);
     }
   };
@@ -42,8 +44,9 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
         className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-8"
       >
         <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-indigo-50 flex items-center justify-center">
-          {/* add lock icon if you want */}
+          {/* Optional: add a lock icon here */}
         </div>
+
         <h1 className="text-2xl font-bold text-center mb-2">Set New Password</h1>
         <p className="text-sm text-slate-500 text-center mb-6">
           Please enter a new password for your account.
@@ -61,15 +64,17 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
         <input
           type="password"
           value={password}
-          onChange={e => setPassword(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          onChange={(e) => setPassword(e.target.value)}
+          autoFocus
+          disabled={submitting} // ⬅ only disabled while we’re actually updating
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
           required
         />
 
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-3 rounded-lg text-white font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+          className="w-full py-3 rounded-lg text-white font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {submitting ? 'Updating…' : 'Update Password'}
         </button>
@@ -77,3 +82,4 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
     </div>
   );
 };
+
