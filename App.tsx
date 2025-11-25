@@ -77,21 +77,24 @@ const App: React.FC = () => {
   const pricingRef = useRef<HTMLDivElement>(null);
   const featuresRef = useRef<HTMLDivElement>(null);
 
-  // Check for Reset Password URL on Mount
-  useEffect(() => {
-    const path = window.location.pathname;
-    const search = window.location.search;
-    const hash = window.location.hash;
+// Check for Reset Password URL on Mount
+useEffect(() => {
+  if (typeof window === 'undefined') return;
 
-    const isRecovery =
-      path === '/reset-password' ||
-      search.includes('type=recovery') ||
-      hash.includes('type=recovery');
+  const path = window.location.pathname || '';
+  const search = window.location.search || '';
+  const hash = window.location.hash || '';
 
-    if (isRecovery) {
-      setCurrentView('reset_password');
-    }
-  }, []);
+  const isRecovery =
+    search.includes('type=recovery') ||
+    hash.includes('type=recovery') ||
+    path.toLowerCase().includes('reset-password');
+
+  if (isRecovery) {
+    setCurrentView('reset_password');
+  }
+}, []);
+
 
   // 🔹 Any Supabase user = active Pro user
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
