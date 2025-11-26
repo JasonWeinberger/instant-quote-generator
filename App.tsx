@@ -1,3 +1,10 @@
+Here’s the fully updated `App.tsx` with:
+
+* `fetchUserProfile` declared **before** it’s used.
+* Supabase email-confirmation handling using `access_token` + `refresh_token` and `auth.setSession(...)`.
+* No `getSessionFromUrl` anywhere, so TS won’t complain.
+
+```tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { generateQuote } from './services/geminiService';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
@@ -79,75 +86,8 @@ const App: React.FC = () => {
       setCurrentView('reset_password');
     }
   }, []);
-// 🔐 Handle Supabase auth redirects (signup / magic link / email confirmation) — NOT recovery
-useEffect(() => {
-  if (!isSupabaseConfigured() || !supabase) return;
-  const client = supabase!; // non-null for TS
 
-  const handleAuthRedirect = async () => {
-    const url = window.location.href;
-    const hash = window.location.hash;
-
-    // --- Skip recovery here; handled by ResetPasswordPage
-    if (url.includes('type=recovery') || hash.includes('type=recovery')) {
-      return;
-    }
-
-    // --- PKCE-style flow (?code=...&type=...)
-    if (url.includes('code=') && url.includes('type=')) {
-      const parsed = new URL(url);
-      const code = parsed.searchParams.get('code');
-
-      if (code) {
-        const { error } = await client.auth.exchangeCodeForSession(code);
-        if (error) {
-          console.error('Auth redirect exchange error:', error);
-        } else {
-          const { data } = await client.auth.getUser();
-          if (data.user) {
-            await fetchUserProfile(data.user.id, data.user.email || '');
-          }
-        }
-      }
-
-      // Clean query params so refresh doesn’t re-run exchange
-      try {
-        const clean = new URL(window.location.href);
-        clean.searchParams.delete('code');
-        clean.searchParams.delete('type');
-        window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash);
-      } catch (e) {
-        console.warn('Failed to clean auth redirect URL', e);
-      }
-
-      return;
-    }
-
-    // --- Hash-based flow (#access_token=...&refresh_token=...&type=signup|magiclink)
-    if (hash.includes('access_token=')) {
-      const { data, error } = await client.auth.getSessionFromUrl({ storeSession: true });
-      if (error) {
-        console.error('getSessionFromUrl error:', error);
-      } else if (data.session?.user) {
-        await fetchUserProfile(data.session.user.id, data.session.user.email || '');
-      }
-
-      // Remove the hash so the token isn’t left in the URL
-      try {
-        window.history.replaceState({}, '', window.location.pathname + window.location.search);
-      } catch (e) {
-        console.warn('Failed to clean hash from URL', e);
-      }
-    }
-  };
-
-  handleAuthRedirect();
-}, [fetchUserProfile]);
-
-
-
-
-  // Memoize fetchUserProfile
+  // Fetch user + profile from Supabase
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
     if (!supabase) return;
     const client = supabase!;
@@ -165,6 +105,7 @@ useEffect(() => {
       let status = dbData?.status || 'trial';
       let plan = dbData?.plan || 'starter';
 
+      // If metadata says active but DB doesn't, sync DB
       if (authMetadata.status === 'active' && status !== 'active') {
         status = 'active';
         plan = 'pro';
@@ -180,7 +121,9 @@ useEffect(() => {
             company_address: dbData?.company_address,
             updated_at: new Date().toISOString()
           });
-        } catch (e) { console.warn("DB sync error", e); }
+        } catch (e) {
+          console.warn("DB sync error", e);
+        }
       }
 
       const u: User = {
@@ -198,6 +141,52 @@ useEffect(() => {
       console.error("Error fetching profile:", err);
     }
   }, []);
+
+  // 🔐 Handle Supabase auth redirects for email confirmation / signup (hash with access_token)
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+    const client = supabase!;
+
+    const handleAuthRedirect = async () => {
+      const hash = window.location.hash;
+
+      // Recovery is handled separately
+      if (hash.includes('type=recovery')) return;
+
+      // Supabase link looks like: #access_token=...&refresh_token=...&type=signup
+      if (hash.includes('access_token') && hash.includes('refresh_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const access_token = params.get('access_token');
+        const refresh_token = params.get('refresh_token');
+
+        if (access_token && refresh_token) {
+          const { data, error } = await client.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (error) {
+            console.error('Auth redirect setSession error:', error);
+          } else if (data?.user) {
+            await fetchUserProfile(data.user.id, data.user.email ?? '');
+          }
+        }
+
+        // Clean the URL so refresh doesn't re-run this and tokens aren't left in the bar
+        try {
+          window.history.replaceState(
+            {},
+            '',
+            window.location.pathname + window.location.search
+          );
+        } catch (e) {
+          console.warn('Failed to clean hash from URL', e);
+        }
+      }
+    };
+
+    handleAuthRedirect();
+  }, [fetchUserProfile]);
 
   // Initialize Auth
   useEffect(() => {
@@ -1028,4 +1017,5 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
 };
 
 export default App;
+```
 
