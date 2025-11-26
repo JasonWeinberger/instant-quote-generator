@@ -13,22 +13,18 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🔥 CRITICAL: Exchange recovery code for a session when page loads
+  // 🔥 CRITICAL: Supabase password reset must parse FULL URL (including hash)
   useEffect(() => {
     const load = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
+      // Supabase V2 puts recovery info in the HASH, not search params
+      const fullUrl = window.location.href;
 
-      if (!code) {
-        setError("Invalid or expired reset link. Please request a new one.");
-        setInitializing(false);
-        return;
-      }
-
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      // Attempt to exchange the recovery token for a session
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(fullUrl);
 
       if (exchangeError) {
-        setError(exchangeError.message || "Invalid or expired reset link.");
+        console.error("Exchange error:", exchangeError);
+        setError("Invalid or expired reset link. Please request a new one.");
       }
 
       setInitializing(false);
