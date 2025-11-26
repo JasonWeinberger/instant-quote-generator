@@ -40,7 +40,7 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
       }
 
       // 1. Attempt to Create Account
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
