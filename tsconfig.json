@@ -9,8 +9,10 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": false,
+
+    "noEmit": true,
     "noEmitOnError": false,
+
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": false,
@@ -22,3 +24,4 @@
   "include": ["src", "vite-env.d.ts"],
   "exclude": ["node_modules", "vite.config.ts"]
 }
+
