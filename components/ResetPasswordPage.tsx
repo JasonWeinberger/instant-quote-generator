@@ -13,18 +13,20 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🔥 CRITICAL: Supabase password reset must parse FULL URL (including hash)
+  // 🔥 CRITICAL — Must exchange PKCE code for session BEFORE allowing password update
   useEffect(() => {
     const load = async () => {
-      // Supabase V2 puts recovery info in the HASH, not search params
       const fullUrl = window.location.href;
 
-      // Attempt to exchange the recovery token for a session
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(fullUrl);
+      console.log("Attempting PKCE exchange with:", fullUrl);
 
-      if (exchangeError) {
-        console.error("Exchange error:", exchangeError);
-        setError("Invalid or expired reset link. Please request a new one.");
+      const { data, error } = await supabase.auth.exchangeCodeForSession(fullUrl);
+
+      if (error) {
+        console.error("PKCE exchange error:", error);
+        setError("Your reset password link is invalid or has expired. Please request a new one.");
+      } else {
+        console.log("PKCE exchange success:", data);
       }
 
       setInitializing(false);
@@ -125,3 +127,4 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
     </div>
   );
 };
+
