@@ -13,7 +13,6 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // PKCE Recovery flow (Supabase places the values in hash)
   useEffect(() => {
     const load = async () => {
       const fullUrl = window.location.href;
@@ -104,7 +103,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
 
             {error && (
               <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
-                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <AlertCircle size={16} className="shrink-0 mt-0.5" /> 
                 <span>{error}</span>
               </div>
             )}
