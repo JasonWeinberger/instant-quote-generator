@@ -67,6 +67,40 @@ const App: React.FC = () => {
     }
   }, []);
 
+    // Handle Supabase auth redirects (signup / magic link) – NOT recovery
+  useEffect(() => {
+    if (!supabase || !isSupabaseConfigured()) return;
+
+    const handleAuthRedirect = async () => {
+      const url = window.location.href;
+
+      // Skip recovery links – those are handled by ResetPasswordPage
+      if (url.includes('type=recovery')) return;
+
+      // Supabase PKCE / magic links arrive with code + type in the URL
+      if (url.includes('code=') && url.includes('type=')) {
+        const { error } = await supabase.auth.exchangeCodeForSession(url);
+
+        if (error) {
+          console.error('Auth redirect exchange error:', error);
+        }
+
+        // Clean query params so refresh doesn't re-run exchange
+        try {
+          const clean = new URL(window.location.href);
+          clean.searchParams.delete('code');
+          clean.searchParams.delete('type');
+          window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash);
+        } catch (e) {
+          console.warn('Failed to clean auth redirect URL', e);
+        }
+      }
+    };
+
+    handleAuthRedirect();
+  }, []);
+
+
   // Memoize fetchUserProfile
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
       if (!supabase) return;
