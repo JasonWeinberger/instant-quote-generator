@@ -9,20 +9,32 @@ interface ResetPasswordPageProps {
 export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // 🔥 CRITICAL: Exchange recovery code for a session when page loads
   useEffect(() => {
-    // Ensure we have a session (Supabase handles the token from URL automatically)
-    const checkSession = async () => {
-      if (!supabase) return;
-      const { data } = await supabase.auth.getSession();
-      // If no session, the link is likely invalid or expired
-      if (!data.session) {
+    const load = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+
+      if (!code) {
         setError("Invalid or expired reset link. Please request a new one.");
+        setInitializing(false);
+        return;
       }
+
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (exchangeError) {
+        setError(exchangeError.message || "Invalid or expired reset link.");
+      }
+
+      setInitializing(false);
     };
-    checkSession();
+
+    load();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,17 +48,11 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
       return;
     }
 
-    if (!supabase) {
-        setError("Supabase client not initialized.");
-        setLoading(false);
-        return;
-    }
-
     try {
-      const { error } = await supabase.auth.updateUser({ password: password });
+      const { error } = await supabase.auth.updateUser({ password });
+
       if (error) throw error;
-      
-      // Successful update
+
       onSuccess();
     } catch (err: any) {
       console.error("Password update failed:", err);
@@ -55,6 +61,14 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
       setLoading(false);
     }
   };
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
+        Validating reset link...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
