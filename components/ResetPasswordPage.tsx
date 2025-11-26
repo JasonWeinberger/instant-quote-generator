@@ -9,25 +9,20 @@ interface ResetPasswordPageProps {
 export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      const fullUrl = window.location.href;
-
-      const { error: exchangeError } = await supabase!.auth.exchangeCodeForSession(fullUrl);
-
-      if (exchangeError) {
-        console.error("Exchange error:", exchangeError);
+    // Ensure we have a session (Supabase handles the token from URL automatically)
+    const checkSession = async () => {
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      // If no session, the link is likely invalid or expired
+      if (!data.session) {
         setError("Invalid or expired reset link. Please request a new one.");
       }
-
-      setInitializing(false);
     };
-
-    load();
+    checkSession();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -41,11 +36,17 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
       return;
     }
 
+    if (!supabase) {
+        setError("Supabase client not initialized.");
+        setLoading(false);
+        return;
+    }
+
     try {
-      const { error } = await supabase!.auth.updateUser({ password });
-
+      const { error } = await supabase.auth.updateUser({ password: password });
       if (error) throw error;
-
+      
+      // Successful update
       onSuccess();
     } catch (err: any) {
       console.error("Password update failed:", err);
@@ -55,14 +56,6 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
     }
   };
 
-  if (initializing) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-600">
-        Validating reset link...
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -70,7 +63,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
           <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner">
             <KeyRound size={32} />
           </div>
-
+          
           <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Set New Password</h2>
           <p className="text-slate-500 text-center mb-8 text-sm">
             Please enter a new password for your account.
