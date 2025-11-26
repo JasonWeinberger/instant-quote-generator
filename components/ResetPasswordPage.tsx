@@ -13,20 +13,16 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // 🔥 CRITICAL — Must exchange PKCE code for session BEFORE allowing password update
+  // 🔥 Critical: Exchange PKCE recovery code for a session
   useEffect(() => {
     const load = async () => {
       const fullUrl = window.location.href;
 
-      console.log("Attempting PKCE exchange with:", fullUrl);
-
-      const { data, error } = await supabase.auth.exchangeCodeForSession(fullUrl);
+      const { data, error } = await (supabase!).auth.exchangeCodeForSession(fullUrl);
 
       if (error) {
         console.error("PKCE exchange error:", error);
         setError("Your reset password link is invalid or has expired. Please request a new one.");
-      } else {
-        console.log("PKCE exchange success:", data);
       }
 
       setInitializing(false);
@@ -47,7 +43,7 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await (supabase!).auth.updateUser({ password });
 
       if (error) throw error;
 
@@ -127,4 +123,5 @@ export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess 
     </div>
   );
 };
+
 
