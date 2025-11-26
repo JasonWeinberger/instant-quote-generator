@@ -1,140 +1,79 @@
-// src/components/EmailCaptureModal.tsx
-import React, { useEffect, useState } from 'react';
-import { X, Mail, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ArrowRight, Lock } from 'lucide-react';
 
 interface EmailCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (email: string, password: string) => void;
+  onSubmit: (email: string) => void;
   initialEmail?: string;
 }
 
-export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialEmail = '',
-}) => {
+export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, onClose, onSubmit, initialEmail = '' }) => {
   const [email, setEmail] = useState(initialEmail);
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Sync state if initialEmail prop changes (e.g. user loads asynchronously)
   useEffect(() => {
-    if (isOpen) {
-      setEmail(initialEmail || '');
-      setPassword('');
-      setError(null);
-      setIsSubmitting(false);
+    if (initialEmail) {
+      setEmail(initialEmail);
     }
-  }, [isOpen, initialEmail]);
+  }, [initialEmail]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    if (!email.trim()) {
-      setError('Please enter your email.');
-      return;
-    }
-
-    if (!password.trim()) {
-      setError('Please create a password.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      await onSubmit(email.trim(), password);
-    } catch (err: any) {
-      console.error('[EmailCaptureModal] submit error', err);
-      setError(err?.message || 'Something went wrong. Please try again.');
-    } finally {
-      setIsSubmitting(false);
+    if (email.trim()) {
+      onSubmit(email);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in zoom-in-95 duration-200">
-        <button
-          type="button"
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative animate-in zoom-in-95 duration-200">
+        <button 
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-full bg-white/70 hover:bg-slate-100 text-slate-500 hover:text-slate-700 shadow-sm transition-colors"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
         >
-          <X size={18} />
+          <X size={20} />
         </button>
 
-        <div className="p-6 sm:p-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-            Get Unlimited Access
-          </h2>
-          <p className="text-sm text-slate-500 mb-6">
-            Enter your email and create a password to continue to secure payment.
+        <div className="p-8">
+          <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-6 text-indigo-600">
+            <Lock size={24} />
+          </div>
+          
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Final Step</h3>
+          <p className="text-slate-500 mb-6">
+            Enter your email to link your unlimited access. We'll verify this after payment.
           </p>
 
-          {error && (
-            <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 flex items-center gap-2">
-              <span>⚠️</span>
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Email
-              </label>
-              <div className="relative group">
-                <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-                  placeholder="you@company.com"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Create a password <span className="text-slate-400">(min. 6 characters)</span>
-              </label>
-              <div className="relative group">
-                <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
-                  placeholder="At least 6 characters"
-                />
-              </div>
-            </div>
-
+          <form onSubmit={handleSubmit}>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none mb-6"
+            />
+            
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full mt-2 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5"
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
             >
-              {isSubmitting ? 'Continuing…' : 'Continue to Payment'}
+              Continue to Payment <ArrowRight size={18} />
             </button>
-
-            <p className="text-[11px] text-slate-400 text-center mt-2">
-              Your password will also be used to log into your account after purchase.
-            </p>
           </form>
+        </div>
+        
+        <div className="bg-slate-50 px-8 py-4 text-center border-t border-slate-100">
+          <p className="text-xs text-slate-400">
+            Secure checkout powered by Stripe.
+          </p>
         </div>
       </div>
     </div>

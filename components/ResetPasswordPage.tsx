@@ -1,85 +1,117 @@
-// components/ResetPasswordPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { Lock, Eye, EyeOff, AlertCircle, ArrowRight, KeyRound } from 'lucide-react';
 
-export interface ResetPasswordPageProps {
+interface ResetPasswordPageProps {
   onSuccess: () => void;
-  onUpdatePassword: (password: string) => Promise<void>;
 }
 
-export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({
-  onSuccess,
-  onUpdatePassword,
-}) => {
+export const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    // Ensure we have a session (Supabase handles the token from URL automatically)
+    const checkSession = async () => {
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      // If no session, the link is likely invalid or expired
+      if (!data.session) {
+        setError("Invalid or expired reset link. Please request a new one.");
+      }
+    };
+    checkSession();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     setError(null);
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+      setError("Password must be at least 6 characters.");
+      setLoading(false);
       return;
     }
 
-    setSubmitting(true);
+    if (!supabase) {
+        setError("Supabase client not initialized.");
+        setLoading(false);
+        return;
+    }
 
     try {
-      await onUpdatePassword(password);
+      const { error } = await supabase.auth.updateUser({ password: password });
+      if (error) throw error;
+      
+      // Successful update
       onSuccess();
     } catch (err: any) {
-      // Show Supabase error (invalid/expired link, missing session, etc.)
-      setError(err?.message || 'Something went wrong. Please request a new link.');
+      console.error("Password update failed:", err);
+      setError(err.message || "Failed to update password. Please try again.");
     } finally {
-      // 🔥 ensures the field & button are re-enabled after ANY outcome
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 p-8"
-      >
-        <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-indigo-50 flex items-center justify-center">
-          {/* Optional: add a lock icon here */}
-        </div>
-
-        <h1 className="text-2xl font-bold text-center mb-2">Set New Password</h1>
-        <p className="text-sm text-slate-500 text-center mb-6">
-          Please enter a new password for your account.
-        </p>
-
-        {error && (
-          <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 flex gap-2">
-            {error}
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 animate-fade-in-up">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8">
+          <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6 text-indigo-600 shadow-inner">
+            <KeyRound size={32} />
           </div>
-        )}
+          
+          <h2 className="text-2xl font-bold text-slate-900 text-center mb-2">Set New Password</h2>
+          <p className="text-slate-500 text-center mb-8 text-sm">
+            Please enter a new password for your account.
+          </p>
 
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          New password
-        </label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoFocus
-          disabled={submitting} // ⬅ only disabled while we’re actually updating
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-400"
-          required
-        />
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">New Password</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock size={18} className="text-slate-400" />
+                </div>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-10 pr-10 py-3 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3 rounded-lg text-white font-semibold bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {submitting ? 'Updating…' : 'Update Password'}
-        </button>
-      </form>
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" /> 
+                <span>{error}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Updating...' : 'Update Password'}
+              {!loading && <ArrowRight size={18} />}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };
-
