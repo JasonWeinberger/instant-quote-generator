@@ -6,7 +6,6 @@
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
 
@@ -24,4 +23,3 @@
   "include": ["src", "vite-env.d.ts"],
   "exclude": ["node_modules", "vite.config.ts"]
 }
-
