@@ -1,29 +1,73 @@
-import React, { useState, useEffect } from 'react';
-import { X, ArrowRight, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, ArrowRight, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface EmailCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (email: string) => void;
+  onSubmit: () => void; // Just triggers redirect now
   initialEmail?: string;
 }
 
 export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, onClose, onSubmit, initialEmail = '' }) => {
   const [email, setEmail] = useState(initialEmail);
-
-  // Sync state if initialEmail prop changes (e.g. user loads asynchronously)
-  useEffect(() => {
-    if (initialEmail) {
-      setEmail(initialEmail);
-    }
-  }, [initialEmail]);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email.trim()) {
-      onSubmit(email);
+    setError(null);
+    
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter both email and password.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      if (!supabase) {
+        throw new Error("Supabase client not initialized");
+      }
+
+      // 1. Attempt to Create Account
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { status: 'trial', plan: 'starter' }
+        }
+      });
+
+      if (signUpError) {
+        // If user already exists, we allow them to proceed if the password matches (login check)
+        // or just let them try to pay. But for "Signup First", we generally want a new account or valid login.
+        // For simplicity in this flow, if they exist, we'll store creds and try to use them post-payment.
+        if (!signUpError.message.toLowerCase().includes('already registered')) {
+           throw signUpError;
+        }
+      }
+
+      // 2. Store credentials temporarily for post-payment auto-login
+      localStorage.setItem('temp_email', email);
+      localStorage.setItem('temp_password', password);
+
+      // 3. Proceed to Stripe
+      onSubmit();
+
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      setError(err.message || "Failed to create account.");
+      setLoading(false);
     }
   };
 
@@ -42,30 +86,63 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
             <Lock size={24} />
           </div>
           
-          <h3 className="text-xl font-bold text-slate-900 mb-2">Final Step</h3>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">Create Account</h3>
           <p className="text-slate-500 mb-6">
-            Enter your email to link your unlimited access. We'll verify this after payment.
+            Create your login now. You'll use this to access your unlimited account after payment.
           </p>
 
-          <form onSubmit={handleSubmit}>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              required
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none mb-6"
-            />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                required
+                autoFocus
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                Create Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
             
             <button
               type="submit"
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70"
             >
-              Continue to Payment <ArrowRight size={18} />
+              {loading ? 'Creating Account...' : 'Continue to Payment'} <ArrowRight size={18} />
             </button>
           </form>
         </div>

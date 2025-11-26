@@ -44,8 +44,8 @@ const App: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [apiKeyMissing, setApiKeyMissing] = useState(false);
   
-  // Email Capture State
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  // Signup/Paywall State
+  const [showSignupModal, setShowSignupModal] = useState(false);
 
   const resultRef = useRef<HTMLDivElement>(null);
   const pricingRef = useRef<HTMLDivElement>(null);
@@ -119,23 +119,16 @@ const App: React.FC = () => {
       }
   }, []);
 
-  // Initialize
+  // Initialize Auth
   useEffect(() => {
-    // Check for API Key
-    // process.env.API_KEY is replaced by Vite with the actual string value or undefined at build time
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) {
-        setApiKeyMissing(true);
-    }
+    if (!process.env.API_KEY) setApiKeyMissing(true);
 
     const storedCount = localStorage.getItem('quoteUsageCount');
     if (storedCount) setUsageCount(parseInt(storedCount, 10));
 
     const storedHistory = localStorage.getItem('quoteHistory');
     if (storedHistory) {
-      try {
-        setHistory(JSON.parse(storedHistory));
-      } catch (e) { console.error("Failed to parse history", e); }
+      try { setHistory(JSON.parse(storedHistory)); } catch (e) { console.error(e); }
     }
 
     if (!isSupabaseConfigured() || !supabase) {
@@ -145,7 +138,7 @@ const App: React.FC = () => {
                 const parsedUser: User = JSON.parse(storedUser);
                 if (!parsedUser.id) parsedUser.id = 'local_' + Date.now();
                 setUser(parsedUser);
-            } catch (e) { console.error("Failed to parse user", e); }
+            } catch (e) { console.error(e); }
         }
         return;
     }
@@ -175,26 +168,7 @@ const App: React.FC = () => {
                  setCurrentView('reset_password');
                  return; 
              }
-
              if (session) {
-                 const pendingEmail = localStorage.getItem('pendingUpgradeEmail');
-                 const sessionEmail = session.user.email;
-                 
-                 if (pendingEmail && sessionEmail && pendingEmail.toLowerCase() === sessionEmail.toLowerCase()) {
-                     await client.auth.updateUser({
-                         data: { status: 'active', plan: 'pro' }
-                     });
-                     try {
-                        await client.from('users').upsert({
-                            id: session.user.id,
-                            email: sessionEmail,
-                            status: 'active',
-                            plan: 'pro',
-                            updated_at: new Date().toISOString()
-                        });
-                     } catch (e) { console.warn("Upsert failed", e); }
-                     localStorage.removeItem('pendingUpgradeEmail');
-                 }
                  await fetchUserProfile(session.user.id, session.user.email || '');
              }
         }
@@ -205,10 +179,10 @@ const App: React.FC = () => {
   // Check for Payment Success URL Param
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('success') === 'true' || params.get('payment_success') === 'true') {
+    if (params.get('success') === 'true' || params.get('payment_success') === 'true' || window.location.pathname === '/payment_success') {
         setCurrentView('payment_success');
-        // Clean URL but keep view state
-        window.history.replaceState({}, '', window.location.pathname);
+        // Normalize URL
+        window.history.replaceState({}, '', '/payment_success');
     }
   }, []);
 
@@ -222,13 +196,28 @@ const App: React.FC = () => {
   const quotesRemaining = user?.status === 'active' ? 9999 : Math.max(0, MAX_FREE_QUOTES - usageCount);
 
   const handleUpgradeClick = () => {
-      setShowEmailModal(true);
+      setShowSignupModal(true);
   };
 
-  const handleEmailSubmit = (email: string) => {
-      localStorage.setItem('pendingUpgradeEmail', email);
-      setShowEmailModal(false);
-      window.open(STRIPE_LINKS.monthly, '_blank');
+  // Handled by modal now, we just redirect
+  const handleSignupAndPay = () => {
+      window.location.href = STRIPE_LINKS.monthly;
+  };
+
+  // Payment Success Activation
+  const handlePaymentSuccessActivation = async (userId: string, email: string) => {
+      if (!supabase) return;
+      const client = supabase!;
+      
+      await client.from('users').upsert({
+          id: userId,
+          email: email,
+          status: 'active',
+          plan: 'pro',
+          updated_at: new Date().toISOString()
+      });
+      
+      await fetchUserProfile(userId, email);
   };
 
   const handleGenerateClick = async () => {
@@ -325,11 +314,12 @@ const App: React.FC = () => {
       }
   };
 
+  // Forgot Password Redirect
   const handleResetPassword = async (email: string) => {
       if (supabase) {
           const client = supabase!;
           const { error } = await client.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/reset-password`,
+              redirectTo: "https://instantquotegenerator.com/reset-password",
           });
           if (error) throw error;
       }
@@ -342,120 +332,6 @@ const App: React.FC = () => {
           if (error) throw error;
       }
   };
-
-  // PLG FLOW: Passwordless Activation
-  const handlePaymentSuccessActivation = useCallback(async (email: string): Promise<{ result: 'success' | 'existing_user' | 'email_confirmation_required' | 'error', message?: string }> => {
-      console.log('[activate] start', email);
-
-      if (!supabase) {
-          // DEMO MODE
-          const newUser: User = {
-              id: `local_paid_${Date.now()}`,
-              email: email,
-              plan: 'pro',
-              status: 'active',
-              trialStartDate: Date.now()
-          };
-          setUser(newUser);
-          localStorage.setItem('quoteGenUser', JSON.stringify(newUser));
-          setShowPaywallModal(false);
-          console.log('[activate] DONE (demo mode)');
-          return { result: 'success' };
-      }
-
-      const client = supabase!;
-
-      try {
-        // A) Check existing session
-        const { data: sessionData, error: sessionError } = await client.auth.getSession();
-        console.log('[activate] getSession', { sessionData, sessionError });
-
-        if (sessionData?.session) {
-          console.log('[activate] already have session, upgrading user');
-          
-          await client.auth.updateUser({ data: { status: 'active', plan: 'pro' } });
-          
-          const { error: upsertError } = await client.from('users').upsert({
-            id: sessionData.session.user.id,
-            email: sessionData.session.user.email,
-            status: 'active',
-            plan: 'pro',
-            updated_at: new Date().toISOString(),
-          });
-
-          if (upsertError) {
-             console.error('[activate] upsert error (existing session)', upsertError);
-             throw upsertError;
-          }
-
-          await fetchUserProfile(sessionData.session.user.id, sessionData.session.user.email || '');
-          localStorage.removeItem('pendingUpgradeEmail');
-          console.log('[activate] DONE (existing session)');
-          return { result: 'success' };
-        }
-
-        // B) Try sign-up with random password
-        const randomPassword = `Pro-${Math.random().toString(36).slice(-8)}-${Date.now()}!`;
-        console.log('[activate] signUp start', { email, randomPassword });
-
-        const { data: signUpData, error: signUpError } = await client.auth.signUp({ 
-            email, 
-            password: randomPassword,
-            options: {
-                data: { status: 'active', plan: 'pro' }
-            }
-        });
-
-        console.log('[activate] signUp result', { signUpData, signUpError });
-
-        if (signUpError) {
-            const msg = (signUpError.message || '').toLowerCase();
-            // Handle existing user
-            if (msg.includes('already registered') || msg.includes('user already exists') || signUpError.status === 422 || signUpError.status === 400) {
-                console.log('[activate] existing user case');
-                return { result: 'existing_user' };
-            }
-            console.error('[activate] signUp error (fatal)', signUpError);
-            throw signUpError;
-        }
-
-        // Handle Email Confirmation Required (User returned but no Session)
-        // This happens if "Confirm Email" is enabled in Supabase and auto-confirm is off
-        if (signUpData.user && !signUpData.session) {
-             console.log('[activate] signUp successful but no session (email confirmation required)');
-            return { result: 'email_confirmation_required' };
-        }
-
-        if (!signUpData?.user || !signUpData.session) {
-             console.error('[activate] signUp returned no user or session', signUpData);
-             throw new Error('Signup returned no session');
-        }
-
-        // C) Upsert profile row (Authenticated)
-        const { error: upsertError } = await client.from('users').upsert({ 
-            id: signUpData.user.id, 
-            email: email,
-            status: 'active',
-            plan: 'pro',
-            updated_at: new Date().toISOString()
-        });
-        console.log('[activate] upsert result', { upsertError });
-
-        if (upsertError) {
-            console.error('[activate] upsert error', upsertError);
-            throw upsertError;
-        }
-
-        await fetchUserProfile(signUpData.user.id, email);
-        localStorage.removeItem('pendingUpgradeEmail'); 
-        console.log('[activate] DONE (new signup)');
-        return { result: 'success' };
-
-      } catch (err: any) {
-          console.error('[activate] UNHANDLED ERROR', err);
-          return { result: 'existing_user' }; 
-      }
-  }, [fetchUserProfile]);
 
   const handleLogout = async () => {
       if (supabase) {
@@ -503,9 +379,9 @@ const App: React.FC = () => {
       return (
         <>
             <EmailCaptureModal 
-                isOpen={showEmailModal} 
-                onClose={() => setShowEmailModal(false)} 
-                onSubmit={handleEmailSubmit}
+                isOpen={showSignupModal} 
+                onClose={() => setShowSignupModal(false)} 
+                onSubmit={handleSignupAndPay}
                 initialEmail={user?.email}
             />
             <LoginPage 
@@ -540,10 +416,11 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
       
+      {/* Use the updated SignupModal/EmailCaptureModal */}
       <EmailCaptureModal 
-        isOpen={showEmailModal} 
-        onClose={() => setShowEmailModal(false)} 
-        onSubmit={handleEmailSubmit}
+        isOpen={showSignupModal} 
+        onClose={() => setShowSignupModal(false)} 
+        onSubmit={handleSignupAndPay}
         initialEmail={user?.email}
       />
 
@@ -622,6 +499,7 @@ const App: React.FC = () => {
 
       </nav>
 
+      {/* Hero Section */}
       <div className="relative overflow-hidden pt-12 pb-16 lg:pt-20 lg:pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="text-center max-w-3xl mx-auto mb-10">
@@ -633,6 +511,7 @@ const App: React.FC = () => {
                 </p>
             </div>
             
+            {/* Input Area */}
             <div className="bg-white rounded-3xl shadow-2xl shadow-indigo-900/10 border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto relative z-20">
                 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
@@ -825,11 +704,12 @@ Example: "Install 2000sqft asphalt shingle roof on a 1-story gable roof. Tear of
                      
                      <button 
                         onClick={handleUpgradeClick}
-                        className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-1 text-lg flex items-center justify-center gap-2"
-                     >
-                         Get Unlimited Access <ArrowRight size={20} />
-                     </button>
-                     <p className="text-center text-xs text-slate-400 mt-4">
+                        className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2 mb-4"
+                      >
+                          Get Unlimited Access <ArrowRight size={18} />
+                      </button>
+                      
+                      <p className="text-center text-xs text-slate-400 mt-4">
                          Secure payment via Stripe.
                      </p>
                  </div>
