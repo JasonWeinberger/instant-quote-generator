@@ -7,7 +7,6 @@ import { QuoteResultCard } from './components/QuoteResultCard';
 import { LoginPage } from './components/LoginPage';
 import { BillingPortal } from './components/BillingPortal';
 import { PaymentSuccessPage } from './components/PaymentSuccessPage';
-import { EmailCaptureModal } from './components/EmailCaptureModal';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { STRIPE_LINKS } from './constants';
 import { Loader2, AlertCircle, Zap, History, LayoutTemplate, Menu, X, ArrowRight, MapPin, Hammer, Wrench, Check } from 'lucide-react';
