@@ -82,7 +82,10 @@ const App: React.FC = () => {
 
   // 🔐 Handle Supabase auth redirects (signup / magic link / email confirmation) — NOT recovery
   useEffect(() => {
-    if (!supabase || !isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    // Non-null local reference so TS stops complaining
+    const client = supabase!;
 
     const handleAuthRedirect = async () => {
       const url = window.location.href;
@@ -92,7 +95,7 @@ const App: React.FC = () => {
 
       // Supabase PKCE / magic links arrive with code + type in the URL
       if (url.includes('code=') && url.includes('type=')) {
-        const { error } = await supabase.auth.exchangeCodeForSession(url);
+        const { error } = await client.auth.exchangeCodeForSession(url);
 
         if (error) {
           console.error('Auth redirect exchange error:', error);
@@ -112,6 +115,7 @@ const App: React.FC = () => {
 
     handleAuthRedirect();
   }, []);
+
 
   // Memoize fetchUserProfile
   const fetchUserProfile = useCallback(async (userId: string, email: string) => {
