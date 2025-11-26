@@ -245,6 +245,38 @@ const App: React.FC = () => {
         window.history.replaceState({}, document.title, cleanedUrl);
       };
 
+      const runOtpVerification = async (hashValue: string) => {
+        const otpType: 'signup' | 'magiclink' | 'invite' =
+          flowType === 'magiclink' ? 'magiclink' : flowType === 'invite' ? 'invite' : 'signup';
+
+        try {
+          const { data, error } = await client.auth.verifyOtp({
+            type: otpType,
+            token_hash: hashValue,
+          });
+
+          if (error) {
+            console.error('[auth callback] verifyOtp error:', error);
+            return false;
+          }
+
+          cleanAuthParams();
+
+          const sessionUser =
+            data.session?.user ||
+            (await client.auth.getUser().then((res) => (res.error ? null : res.data.user)));
+
+          if (sessionUser) {
+            await fetchUserProfile(sessionUser.id, sessionUser.email || '');
+          }
+
+          return true;
+        } catch (otpErr) {
+          console.error('[auth callback] unexpected verifyOtp error:', otpErr);
+          return false;
+        }
+      };
+
       const handleTokenSession = async () => {
         if (!accessToken || !refreshToken) {
           return false;
@@ -289,34 +321,7 @@ const App: React.FC = () => {
       if (tokenHash) {
         if (hasHandledAuthCallback) return;
         hasHandledAuthCallback = true;
-
-        const otpType: 'signup' | 'magiclink' | 'invite' =
-          flowType === 'magiclink' ? 'magiclink' : flowType === 'invite' ? 'invite' : 'signup';
-
-        try {
-          const { data, error } = await client.auth.verifyOtp({
-            type: otpType,
-            token_hash: tokenHash,
-          });
-
-          if (error) {
-            console.error('[auth callback] verifyOtp error:', error);
-            return;
-          }
-
-          cleanAuthParams();
-
-          const sessionUser =
-            data.session?.user ||
-            (await client.auth.getUser().then((res) => (res.error ? null : res.data.user)));
-
-          if (sessionUser) {
-            await fetchUserProfile(sessionUser.id, sessionUser.email || '');
-          }
-        } catch (otpErr) {
-          console.error('[auth callback] unexpected verifyOtp error:', otpErr);
-        }
-
+        await runOtpVerification(tokenHash);
         return;
       }
 
@@ -327,9 +332,14 @@ const App: React.FC = () => {
 
       try {
         // Exchange the code for a session (logs the user in)
-        const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-        if (exchangeError) {
+        const { data: exchangeData, error: exchangeError } =
+          await client.auth.exchangeCodeForSession(code);
+        if (exchangeError || !exchangeData?.session) {
           console.error('[auth callback] exchangeCodeForSession error:', exchangeError);
+          const otpFallback = await runOtpVerification(code);
+          if (!otpFallback) {
+            hasHandledAuthCallback = false;
+          }
           return;
         }
 
