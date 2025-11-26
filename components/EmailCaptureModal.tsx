@@ -5,11 +5,16 @@ import { supabase } from '../lib/supabase';
 interface EmailCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: () => void; // Just triggers redirect now
+  onSubmit: () => void; // triggers redirect to Stripe
   initialEmail?: string;
 }
 
-export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, onClose, onSubmit, initialEmail = '' }) => {
+export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialEmail = ''
+}) => {
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,7 +26,7 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
+
     if (!email.trim() || !password.trim()) {
       setError("Please enter both email and password.");
       return;
@@ -39,34 +44,18 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
         throw new Error("Supabase client not initialized");
       }
 
-      // 1. Attempt to Create Account
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { status: 'trial', plan: 'starter' }
-        }
-      });
-
-      if (signUpError) {
-        // If user already exists, we allow them to proceed if the password matches (login check)
-        // or just let them try to pay. But for "Signup First", we generally want a new account or valid login.
-        // For simplicity in this flow, if they exist, we'll store creds and try to use them post-payment.
-        if (!signUpError.message.toLowerCase().includes('already registered')) {
-           throw signUpError;
-        }
-      }
-
-      // 2. Store credentials temporarily for post-payment auto-login
+      // ❗️IMPORTANT:
+      // This modal does NOT sign up OR reset passwords.
+      // It ONLY stores the credentials so the user can
+      // be automatically logged in after the Stripe flow.
       localStorage.setItem('temp_email', email);
       localStorage.setItem('temp_password', password);
 
-      // 3. Proceed to Stripe
+      // Continue to Stripe checkout
       onSubmit();
-
     } catch (err: any) {
-      console.error("Signup error:", err);
-      setError(err.message || "Failed to create account.");
+      console.error("Modal error:", err);
+      setError(err.message || "Something went wrong.");
       setLoading(false);
     }
   };
@@ -88,7 +77,7 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
           
           <h3 className="text-xl font-bold text-slate-900 mb-2">Create Account</h3>
           <p className="text-slate-500 mb-6">
-            Create your login now. You'll use this to access your unlimited account after payment.
+            Create your login now. You'll use this after payment to access your unlimited account.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -142,7 +131,8 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
               disabled={loading}
               className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70"
             >
-              {loading ? 'Creating Account...' : 'Continue to Payment'} <ArrowRight size={18} />
+              {loading ? 'Creating Account...' : 'Continue to Payment'} 
+              <ArrowRight size={18} />
             </button>
           </form>
         </div>
