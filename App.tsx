@@ -79,42 +79,72 @@ const App: React.FC = () => {
       setCurrentView('reset_password');
     }
   }, []);
+// 🔐 Handle Supabase auth redirects (signup / magic link / email confirmation) — NOT recovery
+useEffect(() => {
+  if (!isSupabaseConfigured() || !supabase) return;
+  const client = supabase!; // non-null for TS
 
-  // 🔐 Handle Supabase auth redirects (signup / magic link / email confirmation) — NOT recovery
-  useEffect(() => {
-    if (!isSupabaseConfigured() || !supabase) return;
+  const handleAuthRedirect = async () => {
+    const url = window.location.href;
+    const hash = window.location.hash;
 
-    // Non-null local reference so TS stops complaining
-    const client = supabase!;
+    // --- Skip recovery here; handled by ResetPasswordPage
+    if (url.includes('type=recovery') || hash.includes('type=recovery')) {
+      return;
+    }
 
-    const handleAuthRedirect = async () => {
-      const url = window.location.href;
+    // --- PKCE-style flow (?code=...&type=...)
+    if (url.includes('code=') && url.includes('type=')) {
+      const parsed = new URL(url);
+      const code = parsed.searchParams.get('code');
 
-      // Skip recovery links – those are handled by ResetPasswordPage
-      if (url.includes('type=recovery')) return;
-
-      // Supabase PKCE / magic links arrive with code + type in the URL
-      if (url.includes('code=') && url.includes('type=')) {
-        const { error } = await client.auth.exchangeCodeForSession(url);
-
+      if (code) {
+        const { error } = await client.auth.exchangeCodeForSession(code);
         if (error) {
           console.error('Auth redirect exchange error:', error);
-        }
-
-        // Clean query params so refresh doesn't re-run exchange
-        try {
-          const clean = new URL(window.location.href);
-          clean.searchParams.delete('code');
-          clean.searchParams.delete('type');
-          window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash);
-        } catch (e) {
-          console.warn('Failed to clean auth redirect URL', e);
+        } else {
+          const { data } = await client.auth.getUser();
+          if (data.user) {
+            await fetchUserProfile(data.user.id, data.user.email || '');
+          }
         }
       }
-    };
 
-    handleAuthRedirect();
-  }, []);
+      // Clean query params so refresh doesn’t re-run exchange
+      try {
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete('code');
+        clean.searchParams.delete('type');
+        window.history.replaceState({}, '', clean.pathname + clean.search + clean.hash);
+      } catch (e) {
+        console.warn('Failed to clean auth redirect URL', e);
+      }
+
+      return;
+    }
+
+    // --- Hash-based flow (#access_token=...&refresh_token=...&type=signup|magiclink)
+    if (hash.includes('access_token=')) {
+      const { data, error } = await client.auth.getSessionFromUrl({ storeSession: true });
+      if (error) {
+        console.error('getSessionFromUrl error:', error);
+      } else if (data.session?.user) {
+        await fetchUserProfile(data.session.user.id, data.session.user.email || '');
+      }
+
+      // Remove the hash so the token isn’t left in the URL
+      try {
+        window.history.replaceState({}, '', window.location.pathname + window.location.search);
+      } catch (e) {
+        console.warn('Failed to clean hash from URL', e);
+      }
+    }
+  };
+
+  handleAuthRedirect();
+}, [fetchUserProfile]);
+
+
 
 
   // Memoize fetchUserProfile
