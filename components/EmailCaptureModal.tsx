@@ -43,3 +43,39 @@ export const EmailCaptureModal: React.FC<EmailCaptureModalProps> = ({ isOpen, on
           </div>
           
           <h3 className="text-xl font-bold text-slate-900 mb-2">Final Step</h3>
+          <p className="text-slate-500 mb-6">
+            Enter your email to link your unlimited access. We'll verify this after payment.
+          </p>
+
+          <form onSubmit={handleSubmit}>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              Email Address
+            </label>
+            <input
+              type="email"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none mb-6"
+            />
+            
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2"
+            >
+              Continue to Payment <ArrowRight size={18} />
+            </button>
+          </form>
+        </div>
+        
+        <div className="bg-slate-50 px-8 py-4 text-center border-t border-slate-100">
+          <p className="text-xs text-slate-400">
+            Secure checkout powered by Stripe.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
