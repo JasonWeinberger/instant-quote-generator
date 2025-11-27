@@ -55,7 +55,8 @@
     </style>
 
     <!-- Import map -->
-    <script type="importmap">
+
+        <script type="importmap">
       {
         "imports": {
           "react": "https://aistudiocdn.com/react@^19.2.0",
@@ -72,7 +73,7 @@
 
     <link rel="stylesheet" href="/index.css" />
 
-    <!-- Meta Pixel Code (SCRIPT ONLY IN HEAD) -->
+    <!-- Meta Pixel Code -->
     <script>
       !function(f,b,e,v,n,t,s)
       {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -90,7 +91,7 @@
   </head>
 
   <body>
-    <!-- Meta Pixel noscript MUST be in body -->
+    <!-- Meta Pixel noscript MUST be in body, not head -->
     <noscript>
       <img
         height="1"
